@@ -26,6 +26,7 @@
     "express": "^5.1.0",
     "express-validator": "^7.2.1",
     "mongoose": "^8.18.1",
+    "mongoose-paginate-v2": "^1.9.1",
     "swagger-jsdoc": "^3.7.0",
     "swagger-ui-express": "^5.0.1"
   },

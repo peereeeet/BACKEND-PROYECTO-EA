@@ -5,6 +5,7 @@ import usuarioRoutes from './routes/usuarioRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
 import eventoRoutes from './routes/eventoRoutes';
+import apuntadoRoutes from './routes/apuntadoRoutes';
 import { UserService } from './services/usuarioServices';  
 
 
@@ -38,3 +39,4 @@ mongoose.connect('mongodb://localhost:27017/BBDD')
 
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
+app.use('/api/noted', apuntadoRoutes);
