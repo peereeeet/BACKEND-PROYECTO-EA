@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { IUsuario } from '../models/usuario';
 import { UserService } from '../services/usuarioServices';
 import { validationResult } from 'express-validator';
+import Usuario from '../models/usuario';
 
 const userService = new UserService();
 
@@ -20,14 +21,27 @@ export async function createUser(req: Request, res: Response): Promise<Response>
   }
 }
 
-export async function getAllUsers(req: Request, res: Response): Promise<Response> {
+export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
   try {
-    const users = await userService.getAllUsers();
-    return res.status(200).json(users);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10)); // límite máximo de 50
+    const skip = (page - 1) * limit;
+
+    const [total, users] = await Promise.all([
+      Usuario.countDocuments(),
+      Usuario.find().skip(skip).limit(limit).populate('eventos')
+    ]);
+
+    res.status(200).json({
+      data: users,
+      page,
+      totalPages: Math.ceil(total / limit),
+      totalItems: total
+    });
   } catch (error) {
-    return res.status(404).json({ message: (error as Error).message });
+    res.status(500).json({ message: 'Error al obtener usuarios', error });
   }
-}
+};
 
 export async function getUserById(req: Request, res: Response): Promise<Response> {
   try {

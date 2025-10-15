@@ -3,6 +3,7 @@ import {
   createEvento,
   getAllEventos,
   getEventoById,
+  updateEventoById,
   deleteEventoById
 } from '../controller/eventoController';
 
@@ -95,6 +96,8 @@ router.post('/', createEvento);
  *         description: Evento no encontrado
  */
 router.get('/:id', getEventoById);
+
+router.put('/:id', updateEventoById);
 
 /**
  * @swagger

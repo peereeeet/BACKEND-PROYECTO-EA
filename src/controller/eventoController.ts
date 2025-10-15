@@ -46,14 +46,27 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
   }
 }
 
-export async function getAllEventos(req: Request, res: Response): Promise<Response> {
+export const getAllEventos = async (req: Request, res: Response): Promise<void> => {
   try {
-    const eventos = await eventoService.getAllEventos();
-    return res.status(200).json(eventos);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
+    const skip = (page - 1) * limit;
+
+    const [total, eventos] = await Promise.all([
+      Evento.countDocuments(),
+      Evento.find().skip(skip).limit(limit).populate('participantes')
+    ]);
+
+    res.status(200).json({
+      data: eventos,
+      page,
+      totalPages: Math.ceil(total / limit),
+      totalItems: total
+    });
   } catch (error) {
-    return res.status(400).json({ message: (error as Error).message });
+    res.status(500).json({ message: 'Error al obtener eventos', error });
   }
-}
+};
 
 export async function getEventoById(req: Request, res: Response): Promise<Response> {
   try {
@@ -86,3 +99,22 @@ export async function deleteEventoById(req: Request, res: Response): Promise<Res
     return res.status(400).json({ message: (error as Error).message });
   }
 }
+
+export const updateEventoById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const updatedEvento = await Evento.findByIdAndUpdate(id, req.body, {
+      new: true
+    }).populate('participantes');
+
+    if (!updatedEvento) {
+      res.status(404).json({ message: 'Evento no encontrado' });
+      return;
+    }
+
+    res.status(200).json(updatedEvento);
+  } catch (error) {
+    console.error('Error al actualizar evento:', error);
+    res.status(500).json({ message: 'Error al actualizar evento', error });
+  }
+};
