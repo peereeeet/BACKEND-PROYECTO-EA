@@ -151,4 +151,28 @@ export async function createAdminUser(req: Request, res: Response): Promise<Resp
   } catch (error) {
     return res.status(500).json({ error: 'Error con usuario admin' });
   }
+
 }
+
+export async function disableUser(req: Request, res: Response): Promise<Response> {
+  try {
+    const { id } = req.params; // Obtenemos el ID de la URL
+
+    // Llamamos al servicio para que haga la lógica de negocio
+    const updatedUser = await userService.disableUser(id);
+
+    // Si el servicio no encuentra el usuario, devolvemos un 404
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
+    }
+
+    // Si todo va bien, devolvemos el usuario actualizado
+    return res.status(200).json(updatedUser);
+
+  } catch (error) {
+    // Manejo de cualquier otro error
+    return res.status(500).json({ message: (error as Error).message });
+  }
+
+}
+  

@@ -91,4 +91,25 @@ export class UserService {
     }
   }
 
+  /**
+  * Busca un usuario por su ID y actualiza su estado a inactivo.
+  * @param id - El ID del usuario a deshabilitar.
+  * @returns El documento del usuario actualizado o null si no se encontró.
+  */
+  async disableUser(id: string): Promise<IUsuario | null> {
+  // Buscamos al usuario por ID y actualizamos su campo 'isActive' a false
+  const updatedUser = await Usuario.findByIdAndUpdate(
+    id,
+    { $set: { isActive: false } }, // Usamos el operador $set para cambiar el valor
+    { new: true }                  // Esta opción devuelve el documento ya modificado
+  );
+
+  return updatedUser; // Devuelve el usuario actualizado (o null si no lo encontró)
+  }
+
+
+
+
 }
+
+

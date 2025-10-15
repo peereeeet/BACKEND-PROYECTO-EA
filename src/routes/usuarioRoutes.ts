@@ -10,7 +10,8 @@ import {
   deleteUserByUsername,
   addEventToUser,
   loginUser,           
-  createAdminUser      
+  createAdminUser,
+  disableUser    
 } from '../controller/usuarioController';
 
 const router = Router();
@@ -299,5 +300,28 @@ router.post('/auth/login', loginUser);
  *         description: Usuario admin creado/verificado
  */
 router.post('/auth/create-admin', createAdminUser);
+
+/**
+ * @swagger
+ * /api/user/{id}/disable:
+ *   patch:
+ *     summary: Deshabilita un usuario por ID
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del usuario a deshabilitar
+ *   responses:
+ *     '200':
+ *       description: Usuario deshabilitado exitosamente
+ *     '404':
+ *       description: Usuario no encontrado
+ *     '500':
+ *       description: Error del servidor
+ */
+router.patch('/:id/disable', disableUser);
 
 export default router;

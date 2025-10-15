@@ -10,14 +10,11 @@ const options: swaggerJSDoc.Options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000/api-doc', 
+        url: 'http://localhost:3000', 
       },
     ],
   },
-  apis: [
-    './src/routes/usuarioRoutes.ts',
-    './src/routes/eventoRoutes.ts'
-  ],
+  apis: ['./src/routes/*.ts']
 };
 
 const swaggerSpec = swaggerJSDoc(options);
