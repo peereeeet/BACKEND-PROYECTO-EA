@@ -165,8 +165,27 @@ export async function createAdminUser(req: Request, res: Response): Promise<Resp
   } catch (error) {
     return res.status(500).json({ error: 'Error con usuario admin' });
   }
-
 }
+
+export const checkEmailExists = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { gmail } = req.body;
+    if (!gmail) {
+      res.status(400).json({ exists: false, message: 'Correo no proporcionado' });
+      return;
+    }
+
+    const existingUser = await Usuario.findOne({ gmail });
+    if (existingUser) {
+      res.status(200).json({ exists: true });
+    } else {
+      res.status(200).json({ exists: false });
+    }
+  } catch (error) {
+    console.error('Error verificando correo:', error);
+    res.status(500).json({ exists: false, message: 'Error en el servidor' });
+  }
+};
 
 export async function disableUser(req: Request, res: Response): Promise<Response> {
   try {
