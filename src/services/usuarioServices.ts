@@ -98,9 +98,13 @@ export class UserService {
   */
   async disableUser(id: string): Promise<IUsuario | null> {
   // Buscamos al usuario por ID y actualizamos su campo 'isActive' a false
+  const user = await Usuario.findById(id);
+  if (!user) {
+    return null; // Si no se encuentra el usuario, devolvemos null
+  } 
   const updatedUser = await Usuario.findByIdAndUpdate(
     id,
-    { $set: { isActive: false } }, // Usamos el operador $set para cambiar el valor
+    { $set: { isActive: !user.isActive } }, // Usamos el operador $set para cambiar el valor
     { new: true }                  // Esta opción devuelve el documento ya modificado
   );
 
