@@ -118,3 +118,36 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
     res.status(500).json({ message: 'Error al actualizar evento', error });
   }
 };
+
+export const checkEventNameExists = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name } = req.body;
+    if (!name) {
+      res.status(400).json({
+        exists: false,
+        message: "El campo 'name' es obligatorio"
+      });
+      return;
+    }
+
+    const existingEvent = await Evento.findOne({ name });
+    if (existingEvent) {
+      res.status(200).json({
+        exists: true,
+        message: 'Ya existe un evento con este título'
+      });
+      return;
+    }
+
+    res.status(200).json({
+      exists: false,
+      message: 'El título está disponible'
+    });
+  } catch (error) {
+    res.status(500).json({
+      exists: false,
+      error: 'Error al verificar el título del evento',
+      details: error instanceof Error ? error.message : error
+    });
+  }
+};

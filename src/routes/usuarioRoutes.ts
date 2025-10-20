@@ -12,7 +12,9 @@ import {
   loginUser,           
   createAdminUser,
   checkEmailExists,
-  disableUser    
+  checkUsernameExists,
+  disableUser,   
+  updateUserRole
 } from '../controller/usuarioController';
 
 const router = Router();
@@ -326,5 +328,9 @@ router.post('/auth/create-admin', createAdminUser);
 router.patch('/:id/disable', disableUser);
 
 router.post('/check-email', checkEmailExists);
+
+router.post('/check-username', checkUsernameExists);
+
+router.put('/:id/role', updateUserRole);
 
 export default router;

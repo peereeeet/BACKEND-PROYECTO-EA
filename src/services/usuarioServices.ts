@@ -79,7 +79,8 @@ export class UserService {
           username: 'admin',
           gmail: 'admin@example.com',
           password: 'admin',
-          birthday: new Date('2000-01-01')
+          birthday: new Date('2000-01-01'),
+          role: 'admin'
         });
         await adminUser.save();
         console.log('Usuario admin creado exitosamente');
@@ -110,9 +111,6 @@ export class UserService {
 
   return updatedUser; // Devuelve el usuario actualizado (o null si no lo encontró)
   }
-
-
-
 
 }
 
