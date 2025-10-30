@@ -3,11 +3,8 @@ import {
   createUser,
   getAllUsers,
   getUserById,
-  getUserByUsername,
   updateUserById,
-  updateUserByUsername,
   deleteUserById,
-  deleteUserByUsername,
   addEventToUser,
   loginUser,           
   createAdminUser,
@@ -106,26 +103,7 @@ router.post('/', createUser);
  */
 router.get('/:id', getUserById);
 
-/**
- * @swagger
- * /api/user/username/{username}:
- *   get:
- *     summary: Obtener un usuario por nombre de usuario
- *     tags: [Usuarios]
- *     parameters:
- *       - in: path
- *         name: username
- *         required: true
- *         schema:
- *           type: string
- *         description: Nombre de usuario
- *     responses:
- *       200:
- *         description: Usuario encontrado
- *       404:
- *         description: Usuario no encontrado
- */
-router.get('/username/:username', getUserByUsername);
+
 
 /**
  * @swagger
@@ -154,32 +132,7 @@ router.get('/username/:username', getUserByUsername);
  */
 router.put('/:id', updateUserById);
 
-/**
- * @swagger
- * /api/user/username/{username}:
- *   put:
- *     summary: Actualizar un usuario por nombre de usuario
- *     tags: [Usuarios]
- *     parameters:
- *       - in: path
- *         name: username
- *         required: true
- *         schema:
- *           type: string
- *         description: Nombre de usuario
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Usuario'
- *     responses:
- *       200:
- *         description: Usuario actualizado exitosamente
- *       404:
- *         description: Usuario no encontrado
- */
-router.put('/username/:username', updateUserByUsername);
+
 
 /**
  * @swagger
@@ -202,26 +155,6 @@ router.put('/username/:username', updateUserByUsername);
  */
 router.delete('/:id', deleteUserById);
 
-/**
- * @swagger
- * /api/user/username/{username}:
- *   delete:
- *     summary: Eliminar un usuario por nombre de usuario
- *     tags: [Usuarios]
- *     parameters:
- *       - in: path
- *         name: username
- *         required: true
- *         schema:
- *           type: string
- *         description: Nombre de usuario
- *     responses:
- *       200:
- *         description: Usuario eliminado exitosamente
- *       404:
- *         description: Usuario no encontrado
- */
-router.delete('/username/:username', deleteUserByUsername);
 
 /**
  * @swagger

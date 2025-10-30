@@ -54,34 +54,12 @@ export async function getUserById(req: Request, res: Response): Promise<Response
   }
 }
 
-export async function getUserByUsername(req: Request, res: Response): Promise<Response> {
-  try {
-    const { username } = req.params;
-    const user = await userService.getUserByUsername(username);
-    if (!user) return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
-    return res.status(200).json(user);
-  } catch (error) {
-    return res.status(400).json({ message: (error as Error).message });
-  }
-}
 
 export async function updateUserById(req: Request, res: Response): Promise<Response> {
   try {
     const { id } = req.params;
     const userData: Partial<IUsuario> = req.body;
     const updatedUser = await userService.updateUserById(id, userData);
-    if (!updatedUser) return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
-    return res.status(200).json(updatedUser);
-  } catch (error) {
-    return res.status(400).json({ message: (error as Error).message });
-  }
-}
-
-export async function updateUserByUsername(req: Request, res: Response): Promise<Response> {
-  try {
-    const { username } = req.params;
-    const userData: Partial<IUsuario> = req.body;
-    const updatedUser = await userService.updateUserByUsername(username, userData);
     if (!updatedUser) return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     return res.status(200).json(updatedUser);
   } catch (error) {
@@ -100,16 +78,6 @@ export async function deleteUserById(req: Request, res: Response): Promise<Respo
   }
 }
 
-export async function deleteUserByUsername(req: Request, res: Response): Promise<Response> {
-  try {
-    const { username } = req.params;
-    const deletedUser = await userService.deleteUserByUsername(username);
-    if (!deletedUser) return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
-    return res.status(200).json(deletedUser);
-  } catch (error) {
-    return res.status(400).json({ message: (error as Error).message });
-  }
-}
 
 export async function addEventToUser(req: Request, res: Response): Promise<Response> {
   try {
