@@ -135,23 +135,53 @@ export async function createAdminUser(req: Request, res: Response): Promise<Resp
   }
 }
 
-export const checkEmailExists = async (req: Request, res: Response): Promise<void> => {
+export const checkEmailExists = async (req: Request, res: Response) => {
   try {
-    const { gmail } = req.body;
+    const { gmail, userId } = req.body;
+
     if (!gmail) {
-      res.status(400).json({ exists: false, message: 'Correo no proporcionado' });
-      return;
+      return res.status(400).json({ exists: false, message: "El campo 'gmail' es obligatorio" });
     }
 
     const existingUser = await Usuario.findOne({ gmail });
-    if (existingUser) {
-      res.status(200).json({ exists: true });
-    } else {
-      res.status(200).json({ exists: false });
+
+    if (!existingUser) {
+      return res.status(200).json({ exists: false, message: "El correo está disponible" });
     }
+
+    if (userId && existingUser._id.toString() === userId) {
+      return res.status(200).json({ exists: false, message: "El correo pertenece al mismo usuario" });
+    }
+
+    return res.status(200).json({ exists: true, message: "El correo ya está registrado" });
+
   } catch (error) {
-    console.error('Error verificando correo:', error);
-    res.status(500).json({ exists: false, message: 'Error en el servidor' });
+    res.status(500).json({ error: "Error al verificar el correo" });
+  }
+};
+
+export const checkUsernameExists = async (req: Request, res: Response) => {
+  try {
+    const { username, userId } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ exists: false, message: "El campo 'username' es obligatorio" });
+    }
+
+    const existingUser = await Usuario.findOne({ username });
+
+    if (!existingUser) {
+      return res.status(200).json({ exists: false, message: "Nombre disponible" });
+    }
+
+    if (userId && existingUser._id.toString() === userId) {
+      return res.status(200).json({ exists: false, message: "Nombre pertenece al mismo usuario" });
+    }
+
+    return res.status(200).json({ exists: true, message: "El nombre de usuario ya está en uso" });
+
+  } catch (error) {
+    res.status(500).json({ error: "Error al verificar el nombre de usuario" });
   }
 };
 

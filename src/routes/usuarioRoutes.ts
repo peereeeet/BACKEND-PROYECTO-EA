@@ -9,6 +9,7 @@ import {
   loginUser,           
   createAdminUser,
   checkEmailExists,
+  checkUsernameExists,
   disableUser    
 } from '../controller/usuarioController';
 
@@ -259,5 +260,7 @@ router.post('/auth/create-admin', createAdminUser);
 router.patch('/:id/disable', disableUser);
 
 router.post('/check-email', checkEmailExists);
+
+router.post('/check-username', checkUsernameExists);
 
 export default router;
