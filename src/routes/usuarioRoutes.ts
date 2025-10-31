@@ -11,6 +11,7 @@ import {
   checkEmailExists,
   disableUser    
 } from '../controller/usuarioController';
+import{ authenticateToken, authenticateRefreshToken } from '../auth/middleware';
 
 const router = Router();
 
@@ -130,7 +131,7 @@ router.get('/:id', getUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.put('/:id', updateUserById);
+router.put('/:id', authenticateToken, updateUserById);
 
 
 
@@ -153,7 +154,7 @@ router.put('/:id', updateUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.delete('/:id', deleteUserById);
+router.delete('/:id',authenticateToken, deleteUserById);
 
 
 /**
@@ -184,7 +185,7 @@ router.delete('/:id', deleteUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.put('/:id/addEvent', addEventToUser);
+router.put('/:id/addEvent', authenticateToken, addEventToUser);
 
 /**
  * @swagger
@@ -256,7 +257,7 @@ router.post('/auth/create-admin', createAdminUser);
  *     '500':
  *       description: Error del servidor
  */
-router.patch('/:id/disable', disableUser);
+router.patch('/:id/disable',authenticateToken, disableUser);
 
 router.post('/check-email', checkEmailExists);
 
