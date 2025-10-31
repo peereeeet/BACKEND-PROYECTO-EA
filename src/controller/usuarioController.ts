@@ -190,26 +190,22 @@ export async function createAdminUser(req: Request, res: Response): Promise<Resp
 
 export const checkEmailExists = async (req: Request, res: Response) => {
   try {
-    const { gmail, userId } = req.body; // ✅ Se puede enviar opcionalmente el ID del usuario en edición
+    const { gmail, userId } = req.body;
 
     if (!gmail) {
       return res.status(400).json({ exists: false, message: "El campo 'gmail' es obligatorio" });
     }
 
-    // Buscar si existe otro usuario con el mismo correo
     const existingUser = await Usuario.findOne({ gmail });
 
-    // ✅ Si no existe, está disponible
     if (!existingUser) {
       return res.status(200).json({ exists: false, message: "El correo está disponible" });
     }
 
-    // ✅ Si existe pero pertenece al mismo usuario en edición, también se permite
     if (userId && existingUser._id.toString() === userId) {
       return res.status(200).json({ exists: false, message: "El correo pertenece al mismo usuario" });
     }
 
-    // ✅ Si existe y pertenece a otro usuario, no se permite
     return res.status(200).json({ exists: true, message: "El correo ya está registrado" });
 
   } catch (error) {
@@ -219,26 +215,22 @@ export const checkEmailExists = async (req: Request, res: Response) => {
 
 export const checkUsernameExists = async (req: Request, res: Response) => {
   try {
-    const { username, userId } = req.body; // userId es opcional (solo si estás editando)
+    const { username, userId } = req.body;
 
     if (!username) {
       return res.status(400).json({ exists: false, message: "El campo 'username' es obligatorio" });
     }
 
-    // Buscar si existe otro usuario con el mismo nombre
     const existingUser = await Usuario.findOne({ username });
 
-    // No existe → disponible
     if (!existingUser) {
       return res.status(200).json({ exists: false, message: "Nombre disponible" });
     }
 
-    // Si existe pero pertenece al mismo usuario → permitido
     if (userId && existingUser._id.toString() === userId) {
       return res.status(200).json({ exists: false, message: "Nombre pertenece al mismo usuario" });
     }
 
-    // Existe y pertenece a otro usuario → duplicado
     return res.status(200).json({ exists: true, message: "El nombre de usuario ya está en uso" });
 
   } catch (error) {
