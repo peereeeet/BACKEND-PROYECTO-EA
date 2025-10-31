@@ -19,8 +19,11 @@ export class UserService {
     return await Usuario.findById(id);
   }
 
-  async updateUserById(id: string, user: Partial<IUsuario>): Promise<IUsuario | null> {
-    return await Usuario.findByIdAndUpdate(id, user, { new: true });
+  async updateUserById(id: string, userData: Partial<IUsuario>): Promise<IUsuario | null> {
+    const user = await Usuario.findById(id);
+    if (!user) return null;
+    Object.assign(user, userData);
+    return user.save();
   }
 
   async deleteUserById(id: string): Promise<IUsuario | null> {

@@ -31,6 +31,7 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
 export function authenticateRefreshToken(req: Request, res: Response, next: NextFunction) {
   try {
     const { refreshToken, userId } = req.body;
+    console.log("Refresh token recibido:", refreshToken);
     if (!refreshToken || !userId) {
       return res.status(401).json({ error: "Refresh token y userId requeridos" });
     }
@@ -48,8 +49,8 @@ export function authenticateRefreshToken(req: Request, res: Response, next: Next
     }
 
     console.log("Refresh token verificado correctamente:", decoded);
-
     next();
+    
   } catch (error) {
     console.error("Error al verificar refresh token:", error);
     return res.status(500).json({ error: "Error interno en la verificación del refresh token" });

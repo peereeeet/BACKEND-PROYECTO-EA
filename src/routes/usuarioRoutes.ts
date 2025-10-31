@@ -10,9 +10,11 @@ import {
   createAdminUser,
   checkEmailExists,
   checkUsernameExists,
-  disableUser    
+  disableUser,    
+  refreshToken
 } from '../controller/usuarioController';
 import{ authenticateToken, authenticateRefreshToken } from '../auth/middleware';
+import Usuario from '../models/usuario';
 
 const router = Router();
 
@@ -263,5 +265,6 @@ router.patch('/:id/disable',authenticateToken, disableUser);
 router.post('/check-email', checkEmailExists);
 
 router.post('/check-username', checkUsernameExists);
+router.post('/refresh', authenticateRefreshToken, refreshToken);
 
 export default router;

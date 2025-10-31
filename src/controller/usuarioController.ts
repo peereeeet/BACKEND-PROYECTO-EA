@@ -117,7 +117,7 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
       });
     }
     const token = await generateToken(user!, res);
-    const refreshToken = await generateToken(user!, res);
+    const refreshToken = await generateRefreshToken(user!, res);
 
     return res.status(200).json({
       message: 'LOGIN EXITOSO',
@@ -210,5 +210,23 @@ export async function disableUser(req: Request, res: Response): Promise<Response
     return res.status(500).json({ message: (error as Error).message });
   }
 
+}
+export async function refreshToken(req: Request, res: Response): Promise<Response> {
+  try {
+    const id = (req as any).user.payload.id;
+    const user = await userService.getUserById(id);
+    if (!user) {  
+      return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
+    }
+    console.log('Usuario para refresh token:', user);
+
+    const newToken = await generateToken(user, res);
+    console.log('Nuevo token generado:', newToken);
+    return res.status(200).json({
+      token: newToken
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'ERROR AL ACTUALIZAR EL TOKEN' });
+  }
 }
   
