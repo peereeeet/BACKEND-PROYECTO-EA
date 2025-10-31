@@ -3,6 +3,7 @@ import { IUsuario } from '../models/usuario';
 import { UserService } from '../services/usuarioServices';
 import { validationResult } from 'express-validator';
 import Usuario from '../models/usuario';
+import { generateToken, generateRefreshToken } from '../auth/token';
 
 const userService = new UserService();
 
@@ -115,10 +116,14 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
         message: 'CREDENCIALES INCORRECTAS' 
       });
     }
+    const token = await generateToken(user!, res);
+    const refreshToken = await generateToken(user!, res);
 
     return res.status(200).json({
       message: 'LOGIN EXITOSO',
-      user: removePassword(user)
+      user: removePassword(user),
+      token,
+      refreshToken
     });
   } catch (error) {
     return res.status(500).json({ error: 'ERROR EN EL LOGIN' });
