@@ -13,14 +13,35 @@ export async function createUser(req: Request, res: Response): Promise<Response>
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { username, gmail, password, birthday } = req.body as IUsuario;
-    const newUser: Partial<IUsuario> = { username, gmail, password, birthday };
+    const { username, gmail, password, birthday, rol } = req.body as IUsuario;
+    const newUser: Partial<IUsuario> = { username, gmail, password, birthday, rol: rol || 'usuario' };
     const user = await userService.createUser(newUser);
     return res.status(201).json(user);
   } catch {
     return res.status(500).json({ error: 'FALLO AL CREAR EL USUARIO' });
   }
 }
+
+export const updateUserRole = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { rol } = req.body;
+    if (!['admin', 'usuario'].includes(rol)) {
+      res.status(400).json({ message: 'Rol inválido' });
+      return;
+    }
+
+    const usuario = await Usuario.findByIdAndUpdate(id, { rol }, { new: true });
+    if (!usuario) {
+      res.status(404).json({ message: 'Usuario no encontrado' });
+      return;
+    }
+
+    res.status(200).json({ message: 'Rol actualizado correctamente', usuario });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar rol del usuario', error });
+  }
+};
 
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
   try {

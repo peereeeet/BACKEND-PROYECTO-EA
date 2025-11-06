@@ -11,7 +11,8 @@ import {
   checkEmailExists,
   checkUsernameExists,
   disableUser,    
-  refreshToken
+  refreshToken,   
+  updateUserRole
 } from '../controller/usuarioController';
 import{ authenticateToken, authenticateRefreshToken } from '../auth/middleware';
 import Usuario from '../models/usuario';
@@ -265,6 +266,10 @@ router.patch('/:id/disable',authenticateToken, disableUser);
 router.post('/check-email', checkEmailExists);
 
 router.post('/check-username', checkUsernameExists);
+
 router.post('/refresh', authenticateRefreshToken, refreshToken);
+
+
+router.put('/:id/rol', authenticateRefreshToken, updateUserRole);
 
 export default router;
