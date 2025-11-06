@@ -8,7 +8,7 @@ export interface IUsuario {
   password: string;
   birthday: Date;
   eventos: Types.ObjectId[];
-  role: 'admin' | 'usuario';
+  rol: 'admin' | 'usuario';
   comparePassword(candidatePassword: string): Promise<boolean>;
   isModified(path: string): boolean;
   isActive: boolean; //Usuario habilitado/deshabilitado
@@ -21,7 +21,7 @@ const usuarioSchema = new Schema<IUsuario>({
   birthday: { type: Date, required: true },
   isActive: { type: Boolean, default: true },
   eventos: [{ type: Schema.Types.ObjectId, ref: 'Evento', default: [] }],
-  role: { type: String, enum: ['admin', 'usuario'] }
+  rol: { type: String, enum: ['admin', 'usuario'], default: 'usuario' }
 }, {
   timestamps: false,
   versionKey: false
