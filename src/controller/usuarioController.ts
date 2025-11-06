@@ -4,6 +4,7 @@ import { UserService } from '../services/usuarioServices';
 import { validationResult } from 'express-validator';
 import Usuario from '../models/usuario';
 import { generateToken, generateRefreshToken } from '../auth/token';
+import mongoose from 'mongoose';
 
 const userService = new UserService();
 
@@ -68,6 +69,9 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
 export async function getUserById(req: Request, res: Response): Promise<Response> {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID inválido' });
+    }
     const user = await userService.getUserById(id);
     if (!user) return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     return res.status(200).json(user);
@@ -248,6 +252,81 @@ export async function refreshToken(req: Request, res: Response): Promise<Respons
     });
   } catch (error) {
     return res.status(500).json({ error: 'ERROR AL ACTUALIZAR EL TOKEN' });
+  }
+}
+
+export async function listUsers(req: Request, res: Response) {
+  try {
+    const page = parseInt(String(req.query.page || '1'), 10);
+    const limit = parseInt(String(req.query.limit || '20'), 10);
+    const q = String(req.query.q || '');
+    const data = await userService.listUsers(page, limit, q);
+    return res.status(200).json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e.message });
+  }
+}
+
+export async function listFriends(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID inválido' });
+    }
+    const page = parseInt(String(req.query.page || '1'), 10);
+    const limit = parseInt(String(req.query.limit || '20'), 10);
+    const q = String(req.query.q || '');
+    const data = await userService.listFriends(id, page, limit, q);
+    return res.status(200).json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e.message });
+  }
+}
+
+export async function addFriend(req: Request, res: Response) {
+  try {
+    const { id, friendId } = req.params;
+    const r = await userService.addFriend(id, friendId);
+    return res.status(200).json(r);
+  } catch (e: any) {
+    return res.status(400).json({ message: e.message });
+  }
+}
+
+export async function removeFriend(req: Request, res: Response) {
+  try {
+    const { id, friendId } = req.params;
+    const r = await userService.removeFriend(id, friendId);
+    return res.status(200).json(r);
+  } catch (e: any) {
+    return res.status(400).json({ message: e.message });
+  }
+}
+
+export async function setStatus(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { online } = req.body;
+    if (typeof online !== 'boolean') {
+      return res.status(400).json({ message: 'online debe ser boolean' });
+    }
+    const out = await userService.setStatus(id, online);
+    res.status(200).json(out);
+  } catch (e: any) {
+    res.status(400).json({ message: e.message || 'No se pudo actualizar estado' });
+  }
+}
+
+export async function heartbeat(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID inválido' });
+    }
+    const hb = await userService.heartbeat(id);
+    return res.status(200).json(hb);
+  } catch (e: any) {
+    return res.status(400).json({ message: e.message });
   }
 }
   
