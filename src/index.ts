@@ -6,6 +6,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
 import eventoRoutes from './routes/eventoRoutes';
 import { UserService } from './services/usuarioServices';  
+import valoracionRoutes from './routes/valoracionRoutes';
 
 
 const app = express();
@@ -38,3 +39,4 @@ mongoose.connect('mongodb://localhost:27017/BBDD')
 
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
+app.use('/api/ratings', valoracionRoutes);
