@@ -3,6 +3,7 @@ import { IUsuario } from '../models/usuario';
 import { UserService } from '../services/usuarioServices';
 import { validationResult } from 'express-validator';
 import Usuario from '../models/usuario';
+import { generateToken, generateRefreshToken } from '../auth/token';
 
 const userService = new UserService();
 
@@ -12,8 +13,8 @@ export async function createUser(req: Request, res: Response): Promise<Response>
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { username, gmail, password, birthday, role } = req.body as IUsuario;
-    const newUser: Partial<IUsuario> = { username, gmail, password, birthday, role: role || 'usuario' };
+    const { username, gmail, password, birthday, rol } = req.body as IUsuario;
+    const newUser: Partial<IUsuario> = { username, gmail, password, birthday, rol: rol || 'usuario' };
     const user = await userService.createUser(newUser);
     return res.status(201).json(user);
   } catch {
@@ -24,13 +25,13 @@ export async function createUser(req: Request, res: Response): Promise<Response>
 export const updateUserRole = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { role } = req.body;
-    if (!['admin', 'usuario'].includes(role)) {
+    const { rol } = req.body;
+    if (!['admin', 'usuario'].includes(rol)) {
       res.status(400).json({ message: 'Rol inválido' });
       return;
     }
 
-    const usuario = await Usuario.findByIdAndUpdate(id, { role }, { new: true });
+    const usuario = await Usuario.findByIdAndUpdate(id, { rol }, { new: true });
     if (!usuario) {
       res.status(404).json({ message: 'Usuario no encontrado' });
       return;
@@ -136,10 +137,14 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
         message: 'CREDENCIALES INCORRECTAS' 
       });
     }
+    const token = await generateToken(user!, res);
+    const refreshToken = await generateRefreshToken(user!, res);
 
     return res.status(200).json({
       message: 'LOGIN EXITOSO',
-      user: removePassword(user)
+      user: removePassword(user),
+      token,
+      refreshToken
     });
   } catch (error) {
     return res.status(500).json({ error: 'ERROR EN EL LOGIN' });
@@ -226,5 +231,23 @@ export async function disableUser(req: Request, res: Response): Promise<Response
     return res.status(500).json({ message: (error as Error).message });
   }
 
+}
+export async function refreshToken(req: Request, res: Response): Promise<Response> {
+  try {
+    const id = (req as any).user.payload.id;
+    const user = await userService.getUserById(id);
+    if (!user) {  
+      return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
+    }
+    console.log('Usuario para refresh token:', user);
+
+    const newToken = await generateToken(user, res);
+    console.log('Nuevo token generado:', newToken);
+    return res.status(200).json({
+      token: newToken
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'ERROR AL ACTUALIZAR EL TOKEN' });
+  }
 }
   
