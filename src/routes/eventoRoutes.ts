@@ -4,6 +4,7 @@ import {
   getAllEventos,
   getEventoById,
   updateEventoById,
+  checkEventNameExists,
   deleteEventoById
 } from '../controller/eventoController';
 
@@ -119,5 +120,7 @@ router.put('/:id', updateEventoById);
  *         description: Evento no encontrado
  */
 router.delete('/:id', deleteEventoById);
+
+router.post('/check-name', checkEventNameExists);
 
 export default router;

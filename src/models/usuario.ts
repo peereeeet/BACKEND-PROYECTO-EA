@@ -8,7 +8,7 @@ export interface IUsuario {
   password: string;
   birthday: Date;
   eventos: Types.ObjectId[];
-  rol: string;
+  rol: 'admin' | 'usuario';
   comparePassword(candidatePassword: string): Promise<boolean>;
   isModified(path: string): boolean;
   isActive: boolean; //Usuario habilitado/deshabilitado
