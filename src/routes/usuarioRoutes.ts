@@ -12,7 +12,12 @@ import {
   checkUsernameExists,
   disableUser,    
   refreshToken,   
-  updateUserRole
+  updateUserRole,
+  addFriend, 
+  removeFriend, 
+  listFriends,
+  setStatus, 
+  heartbeat
 } from '../controller/usuarioController';
 import{ authenticateToken, authenticateRefreshToken } from '../auth/middleware';
 import Usuario from '../models/usuario';
@@ -264,12 +269,16 @@ router.post('/auth/create-admin', createAdminUser);
 router.patch('/:id/disable',authenticateToken, disableUser);
 
 router.post('/check-email', checkEmailExists);
-
 router.post('/check-username', checkUsernameExists);
 
 router.post('/refresh', authenticateRefreshToken, refreshToken);
-
-
 router.put('/:id/rol', authenticateRefreshToken, updateUserRole);
+
+router.post('/:id/friends/:friendId', addFriend);
+router.delete('/:id/friends/:friendId', removeFriend);
+router.get('/:id/friends', listFriends);
+
+router.put('/:id/status', setStatus);
+router.post('/:id/heartbeat', heartbeat);
 
 export default router;
