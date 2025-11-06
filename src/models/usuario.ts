@@ -9,6 +9,9 @@ export interface IUsuario {
   birthday: Date;
   eventos: Types.ObjectId[];
   rol: 'admin' | 'usuario';
+  friends: Types.ObjectId[];
+  online?: boolean;
+  lastSeen?: Date; 
   comparePassword(candidatePassword: string): Promise<boolean>;
   isModified(path: string): boolean;
   isActive: boolean; //Usuario habilitado/deshabilitado
@@ -20,12 +23,17 @@ const usuarioSchema = new Schema<IUsuario>({
   password: { type: String, required: true },
   birthday: { type: Date, required: true },
   isActive: { type: Boolean, default: true },
+  friends: [{ type: Schema.Types.ObjectId, ref: 'Usuario', index: true }],
+  online: { type: Boolean, default: false },
+  lastSeen: { type: Date, default: null },
   eventos: [{ type: Schema.Types.ObjectId, ref: 'Evento', default: [] }],
   rol: { type: String, enum: ['admin', 'usuario'], default: 'usuario' }
 }, {
   timestamps: false,
   versionKey: false
 });
+
+usuarioSchema.index({ username: 'text', gmail: 'text' });
 
 usuarioSchema.pre<IUsuario>('save', async function (next) {
   if (!this.isModified('password')) return next();
