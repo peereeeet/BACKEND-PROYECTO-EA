@@ -167,7 +167,6 @@ async sendFriendRequest(userId: string, targetId: string) {
   return { message: 'Solicitud de amistad enviada' };
 };
 
-// ✅ Aceptar solicitud de amistad
 async acceptFriendRequest(userId: string, requesterId: string) {
   const user = await Usuario.findById(userId);
   const requester = await Usuario.findById(requesterId);
@@ -179,11 +178,9 @@ async acceptFriendRequest(userId: string, requesterId: string) {
     throw new Error('No hay solicitud pendiente de este usuario');
   }
 
-  // Añadir a amigos mutuamente
   user.friends.push(requesterObjectId);
   requester.friends.push(userObjectId);
 
-  // Eliminar la solicitud
   user.friendRequest = user.friendRequest.filter(
     (id) => id.toString() !== requesterId
   );
@@ -194,7 +191,6 @@ async acceptFriendRequest(userId: string, requesterId: string) {
   return { message: 'Solicitud aceptada correctamente' };
 };
 
-// ✅ Rechazar solicitud
 async rejectFriendRequest(userId: string, requesterId: string) {
   const user = await Usuario.findById(userId);
 
