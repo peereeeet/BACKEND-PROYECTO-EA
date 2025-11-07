@@ -2,13 +2,17 @@ import { Usuario, IUsuario } from '../models/usuario';
 import { Evento } from '../models/evento';
 import { Types } from 'mongoose';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 
 export class UserService {
+
   async createUser(user: Partial<IUsuario>): Promise<IUsuario | null> {
     try {
       const newUser = new Usuario(user);
+      logger.info("Usuario Creado correctamente");
       return await newUser.save();
     } catch (error) {
+      logger.error("No se pudo crear el usuario");
       throw new Error((error as Error).message);
     }
   }
@@ -23,8 +27,11 @@ export class UserService {
 
   async updateUserById(id: string, userData: Partial<IUsuario>): Promise<IUsuario | null> {
     const user = await Usuario.findById(id);
-    if (!user) return null;
+    if (!user){ 
+      logger.warn("El usuario no existe");
+      return null;}
     Object.assign(user, userData);
+    logger.info ("Usuario actualizado");
     return user.save();
   }
 
@@ -40,6 +47,7 @@ export class UserService {
     );
     if (updatedUser) {
       await Evento.findByIdAndUpdate(eventId, { $addToSet: { participantes: userId } }, { new: true });
+      logger.info(`Evento añadido correctamente al usuario ${updatedUser.username}`);
     }
     return updatedUser;
   }
@@ -49,17 +57,20 @@ export class UserService {
     try {
       const user = await Usuario.findOne({ username });
       if (!user) {
+        logger.error("Usuario no encontrado");
         return null;
       }
       
       const isPasswordValid = await user.comparePassword(password);
       if (!isPasswordValid) {
+        logger.error("Contraseña incorrecta")
         return null;
       }
     
-      
+      logger.info("El usuario ha iniciado sesion");
       return user;
     } catch (error) {
+      logger.error("Error al iniciar sesion");
       throw new Error((error as Error).message);
     }
   }
@@ -94,6 +105,7 @@ export class UserService {
   async disableUser(id: string): Promise<IUsuario | null> {
   const user = await Usuario.findById(id);
   if (!user) {
+    logger.error("El usuario no existe");
     return null;
   } 
   const updatedUser = await Usuario.findByIdAndUpdate(
@@ -101,7 +113,7 @@ export class UserService {
     { $set: { isActive: !user.isActive } },
     { new: true }
   );
-
+  logger.info(`Usuario ${updatedUser} deshabilitado`);
   return updatedUser;
   }
 
