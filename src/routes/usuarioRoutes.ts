@@ -14,13 +14,16 @@ import {
   refreshToken,   
   updateUserRole,
   sendFriendRequest,
+  getSentRequests,
   acceptFriendRequest,
   rejectFriendRequest,
   getFriendRequests, 
   removeFriend, 
   listFriends,
-  setStatus, 
-  heartbeat
+  putOnline, 
+  putOffline, 
+  removeFriendBoth,
+  postHeartbeat
 } from '../controller/usuarioController';
 import{ authenticateToken, authenticateadminToken, authenticateRefreshToken } from '../auth/middleware';
 import Usuario from '../models/usuario';
@@ -284,7 +287,8 @@ router.get('/friend-requests/:userId',authenticateToken, getFriendRequests);
 router.delete('/:id/friends/:friendId',authenticateToken, removeFriend);
 router.get('/:id/friends',authenticateToken, listFriends);
 
-router.put('/:id/status', setStatus);
-router.post('/:id/heartbeat', heartbeat);
+router.put('/:id/online', putOnline);
+router.put('/:id/offline', putOffline);
+router.post('/:id/heartbeat', postHeartbeat);
 
 export default router;

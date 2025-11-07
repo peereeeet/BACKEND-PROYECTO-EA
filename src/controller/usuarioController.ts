@@ -80,7 +80,6 @@ export async function getUserById(req: Request, res: Response): Promise<Response
   }
 }
 
-
 export async function updateUserById(req: Request, res: Response): Promise<Response> {
   try {
     const { id } = req.params;
@@ -292,6 +291,16 @@ export async function sendFriendRequest(req: Request, res:Response) {
   }
 };
 
+export const getSentRequests = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data = await userService.getSentRequests(id);
+    return res.status(200).json({ ok: true, data });
+  } catch (err: any) {
+    return res.status(400).json({ ok: false, message: err.message || 'Error' });
+  }
+};
+
 export async function acceptFriendRequest(req:Request, res:Response){
   try {
     const { userId, requesterId } = req.body;
@@ -332,30 +341,57 @@ export async function removeFriend(req: Request, res: Response) {
   }
 }
 
-export async function setStatus(req: Request, res: Response) {
+export const putOnline = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { online } = req.body;
-    if (typeof online !== 'boolean') {
-      return res.status(400).json({ message: 'online debe ser boolean' });
-    }
-    const out = await userService.setStatus(id, online);
-    res.status(200).json(out);
-  } catch (e: any) {
-    res.status(400).json({ message: e.message || 'No se pudo actualizar estado' });
+    const u = await userService.setUserOnline(id);
+    return res.json({ ok: true, online: u?.online === true, lastSeen: u?.lastSeen });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: 'No se pudo poner online' });
   }
-}
+};
 
-export async function heartbeat(req: Request, res: Response) {
+export const putOffline = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'ID inválido' });
-    }
-    const hb = await userService.heartbeat(id);
-    return res.status(200).json(hb);
-  } catch (e: any) {
-    return res.status(400).json({ message: e.message });
+    const u = await userService.setUserOffline(id);
+    return res.json({ ok: true, online: u?.online === true, lastSeen: u?.lastSeen });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: 'No se pudo poner offline' });
   }
-}
+};
+
+export const postHeartbeat = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const u = await userService.heartbeat(id);
+    return res.json({ ok: true, online: u?.online === true, lastSeen: u?.lastSeen });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: 'No se pudo registrar heartbeat' });
+  }
+};
+
+export const removeFriendBoth = async (req: Request, res: Response) => {
+  try {
+    const { id, friendId } = req.params;
+
+    if (!id || !friendId) {
+      return res.status(400).json({ ok: false, message: 'Faltan parámetros id o friendId' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(friendId)) {
+      return res.status(400).json({ ok: false, message: 'Alguno de los IDs no es un ObjectId válido' });
+    }
+
+    const me = await userService.unlinkFriendsBothWays(id, friendId);
+    return res.json({ ok: true, me });
+
+  } catch (e: any) {
+    const msg = typeof e?.message === 'string' ? e.message : 'Error interno';
+    if (msg.startsWith('INVALID_OBJECT_ID')) {
+      return res.status(400).json({ ok: false, message: 'ID no válido', detail: msg });
+    }
+    console.error('removeFriendBoth error:', e);
+    return res.status(500).json({ ok: false, message: 'No se pudo eliminar la amistad' });
+  }
+};
   
