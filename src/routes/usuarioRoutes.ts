@@ -25,7 +25,7 @@ import {
   removeFriendBoth,
   postHeartbeat
 } from '../controller/usuarioController';
-import{ authenticateToken, authenticateRefreshToken } from '../auth/middleware';
+import{ authenticateToken, authenticateadminToken, authenticateRefreshToken } from '../auth/middleware';
 import Usuario from '../models/usuario';
 
 const router = Router();
@@ -146,7 +146,7 @@ router.get('/:id', getUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.put('/:id', authenticateToken, updateUserById);
+router.put('/:id', authenticateadminToken, updateUserById);
 
 
 
@@ -169,7 +169,7 @@ router.put('/:id', authenticateToken, updateUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.delete('/:id',authenticateToken, deleteUserById);
+router.delete('/:id',authenticateadminToken, deleteUserById);
 
 
 /**
@@ -200,7 +200,7 @@ router.delete('/:id',authenticateToken, deleteUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.put('/:id/addEvent', authenticateToken, addEventToUser);
+router.put('/:id/addEvent', authenticateadminToken, addEventToUser);
 
 /**
  * @swagger
@@ -272,7 +272,7 @@ router.post('/auth/create-admin', createAdminUser);
  *     '500':
  *       description: Error del servidor
  */
-router.patch('/:id/disable',authenticateToken, disableUser);
+router.patch('/:id/disable',authenticateadminToken, disableUser);
 
 router.post('/check-email', checkEmailExists);
 router.post('/check-username', checkUsernameExists);
@@ -280,14 +280,12 @@ router.post('/check-username', checkUsernameExists);
 router.post('/refresh', authenticateRefreshToken, refreshToken);
 router.put('/:id/rol', authenticateRefreshToken, updateUserRole);
 
-router.post('/friend-request', sendFriendRequest);
-router.post('/friend-accept', acceptFriendRequest);
-router.post('/friend-reject', rejectFriendRequest);
-router.get('/friend-requests/:userId', getFriendRequests);
-//router.delete('/:id/friends/:friendId', removeFriend);
-router.delete('/:id/friends/:friendId', removeFriendBoth);
-router.get('/:id/friends', listFriends);
-router.get('/:id/requests/sent', getSentRequests);
+router.post('/friend-request',authenticateToken, sendFriendRequest);
+router.post('/friend-accept',authenticateToken, acceptFriendRequest);
+router.post('/friend-reject',authenticateToken, rejectFriendRequest);
+router.get('/friend-requests/:userId',authenticateToken, getFriendRequests);
+router.delete('/:id/friends/:friendId',authenticateToken, removeFriend);
+router.get('/:id/friends',authenticateToken, listFriends);
 
 router.put('/:id/online', putOnline);
 router.put('/:id/offline', putOffline);

@@ -125,7 +125,6 @@ function removePassword(user: any) {
 
 /* Login */
 export async function loginUser(req: Request, res: Response): Promise<Response> {
-  console.log('login usuario');
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });

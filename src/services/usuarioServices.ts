@@ -4,14 +4,8 @@ import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 
-function oid(id: string): Types.ObjectId {
-  if (!Types.ObjectId.isValid(id)) {
-    throw new Error(`INVALID_OBJECT_ID:${id}`);
-  }
-  return new Types.ObjectId(id);
-}
-
 export class UserService {
+
   async createUser(user: Partial<IUsuario>): Promise<IUsuario | null> {
     try {
       const newUser = new Usuario(user);
@@ -119,7 +113,6 @@ export class UserService {
     { $set: { isActive: !user.isActive } },
     { new: true }
   );
-
   logger.info(`Usuario ${updatedUser} deshabilitado`);
   return updatedUser;
   }
