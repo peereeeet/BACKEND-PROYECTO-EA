@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken, verifyRefreshToken } from "./token";
 
-export function authenticateToken(req: Request, res: Response, next: NextFunction) {
+export function authenticateadminToken(req: Request, res: Response, next: NextFunction) {
   
  
     const authHeader = req.headers["authorization"];
@@ -26,6 +26,49 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
 
   console.log("Token verificado, usuario:", decoded);
   next();
+}
+export function authenticateToken(req: Request, res: Response, next: NextFunction) {
+    const authHeader = req.headers["authorization"];
+    const token: string = (authHeader && authHeader.split(" ")[1]) ?? "";
+
+    if (!token) {
+        return res.status(401).json({ error: "Token requerido" });
+    }
+
+    const decoded = verifyToken(token);
+    if (!decoded) {
+        return res.status(401).json({ error: "Token inválido o expirado" });
+    }
+
+    console.log("Token verificado, usuario:", decoded);
+    (req as any).user = decoded;
+    next();
+}
+
+export function authenticateOwner(req: Request, res: Response, next: NextFunction) {
+    const authHeader = req.headers["authorization"];
+    const token: string = (authHeader && authHeader.split(" ")[1]) ?? "";
+
+    if (!token) {
+        return res.status(401).json({ error: "Token requerido" });
+    }
+
+    const decoded = verifyToken(token);
+    if (!decoded) {
+        return res.status(401).json({ error: "Token inválido o expirado" });
+    }
+
+    const userIdFromToken: string = (decoded as any).payload.id;
+    const userIdFromParams: string = req.params.id;
+
+    // Solo permitir si es el propio usuario
+    if (userIdFromToken === userIdFromParams) {
+        console.log("Acceso autorizado para usuario:", decoded);
+        (req as any).user = decoded;
+        next();
+    } else {
+        return res.status(403).json({ error: "No tienes permisos para realizar esta acción" });
+    }
 }
 
 export function authenticateRefreshToken(req: Request, res: Response, next: NextFunction) {
