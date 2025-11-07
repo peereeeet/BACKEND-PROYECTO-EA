@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken, verifyRefreshToken } from "./token";
+import{logger} from "../config/logger";
 
-export function authenticateToken(req: Request, res: Response, next: NextFunction) {
+export function authenticateadminToken(req: Request, res: Response, next: NextFunction) {
   
  
     const authHeader = req.headers["authorization"];
@@ -17,27 +18,72 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ error: "Token inválido o expirado" });
   }
   
-
   const rol : string = (decoded as any).payload.rol;
 
   if (rol !== 'admin') {
     return res.status(403).json({ error: "Se requieren privilegios de administrador" });
   }
 
-  console.log("Token verificado, usuario:", decoded);
+  logger.info(`Token verificado, usuario ${decoded}`);
   next();
+}
+export function authenticateToken(req: Request, res: Response, next: NextFunction) {
+    const authHeader = req.headers["authorization"];
+    const token: string = (authHeader && authHeader.split(" ")[1]) ?? "";
+
+    if (!token) {
+        return res.status(401).json({ error: "Token requerido" });
+    }
+
+    const decoded = verifyToken(token);
+    if (!decoded) {
+        return res.status(401).json({ error: "Token inválido o expirado" });
+    }
+
+    logger.info(`Token verificado, usuario ${decoded}`);
+    (req as any).user = decoded;
+    next();
+}
+
+export function authenticateOwner(req: Request, res: Response, next: NextFunction) {
+    const authHeader = req.headers["authorization"];
+    const token: string = (authHeader && authHeader.split(" ")[1]) ?? "";
+
+    if (!token) {
+        logger.warn("Token requerido");
+        return res.status(401).json({ error: "Token requerido" });
+    }
+
+    const decoded = verifyToken(token);
+    if (!decoded) {
+        logger.warn("Token invalido");
+        return res.status(401).json({ error: "Token inválido o expirado" });
+    }
+
+    const userIdFromToken: string = (decoded as any).payload.id;
+    const userIdFromParams: string = req.params.id;
+
+    // Solo permitir si es el propio usuario
+    if (userIdFromToken === userIdFromParams) {
+        logger.info(`Token verificado, usuario ${decoded}`);
+        (req as any).user = decoded;
+        next();
+    } else {
+        return res.status(403).json({ error: "No tienes permisos para realizar esta acción" });
+    }
 }
 
 export function authenticateRefreshToken(req: Request, res: Response, next: NextFunction) {
   try {
     const { refreshToken, userId } = req.body;
-    console.log("Refresh token recibido:", refreshToken);
     if (!refreshToken || !userId) {
+      logger.warn("Refresh token y userId requeridos");
       return res.status(401).json({ error: "Refresh token y userId requeridos" });
     }
 
     const decoded = verifyRefreshToken(refreshToken);
     if (!decoded) {
+      logger.warn("Refresh token inválido o expirado");
       return res.status(401).json({ error: "Refresh token inválido o expirado" });
     }
     (req as any).user = decoded;
@@ -45,14 +91,15 @@ export function authenticateRefreshToken(req: Request, res: Response, next: Next
   const refreshtokenUserid : string = (decoded as any).payload.id;
     // Verificar que el userId del body coincide con el del token
     if (refreshtokenUserid !== userId) {
+      logger.warn("El userId no coincide con el del token");
       return res.status(403).json({ error: "El userId no coincide con el del token" });
     }
 
-    console.log("Refresh token verificado correctamente:", decoded);
+    logger.info(`token verificado, usuario ${decoded}`);
     next();
     
   } catch (error) {
-    console.error("Error al verificar refresh token:", error);
+    logger.error(`Error al verificar el refreshToken ${error}`);
     return res.status(500).json({ error: "Error interno en la verificación del refresh token" });
   }
 }
