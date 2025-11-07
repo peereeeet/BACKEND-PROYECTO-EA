@@ -10,6 +10,7 @@ export interface IUsuario {
   eventos: Types.ObjectId[];
   rol: 'admin' | 'usuario';
   friends: Types.ObjectId[];
+  friendRequest: Types.ObjectId[];
   online?: boolean;
   lastSeen?: Date; 
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -24,6 +25,7 @@ const usuarioSchema = new Schema<IUsuario>({
   birthday: { type: Date, required: true },
   isActive: { type: Boolean, default: true },
   friends: [{ type: Schema.Types.ObjectId, ref: 'Usuario', index: true }],
+  friendRequest: [{type: Schema.Types.ObjectId, ref: 'Usuario', index: true}],
   online: { type: Boolean, default: false },
   lastSeen: { type: Date, default: null },
   eventos: [{ type: Schema.Types.ObjectId, ref: 'Evento', default: [] }],

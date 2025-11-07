@@ -13,7 +13,10 @@ import {
   disableUser,    
   refreshToken,   
   updateUserRole,
-  addFriend, 
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  getFriendRequests, 
   removeFriend, 
   listFriends,
   setStatus, 
@@ -274,7 +277,10 @@ router.post('/check-username', checkUsernameExists);
 router.post('/refresh', authenticateRefreshToken, refreshToken);
 router.put('/:id/rol', authenticateRefreshToken, updateUserRole);
 
-router.post('/:id/friends/:friendId', addFriend);
+router.post('/friend-request', sendFriendRequest);
+router.post('/friend-accept', acceptFriendRequest);
+router.post('/friend-reject', rejectFriendRequest);
+router.get('/friend-requests/:userId', getFriendRequests);
 router.delete('/:id/friends/:friendId', removeFriend);
 router.get('/:id/friends', listFriends);
 
