@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { EventoService } from '../services/eventoServices';
 import { Usuario } from '../models/usuario';
 import { Evento } from '../models/evento';
+import {logger} from '../config/logger';
 
 const eventoService = new EventoService();
 
@@ -114,7 +115,7 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
 
     res.status(200).json(updatedEvento);
   } catch (error) {
-    console.error('Error al actualizar evento:', error);
+    logger.error(`Error al actualizar evento:, ${error}`);
     res.status(500).json({ message: 'Error al actualizar evento', error });
   }
 };
