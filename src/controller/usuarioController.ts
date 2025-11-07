@@ -283,13 +283,43 @@ export async function listFriends(req: Request, res: Response) {
   }
 }
 
-export async function addFriend(req: Request, res: Response) {
+export async function sendFriendRequest(req: Request, res:Response) {
   try {
-    const { id, friendId } = req.params;
-    const r = await userService.addFriend(id, friendId);
-    return res.status(200).json(r);
-  } catch (e: any) {
-    return res.status(400).json({ message: e.message });
+    const { userId, targetId } = req.body;
+    const result = await userService.sendFriendRequest(userId, targetId);
+    res.status(200).json(result);
+  } catch (error:any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export async function acceptFriendRequest(req:Request, res:Response){
+  try {
+    const { userId, requesterId } = req.body;
+    const result = await userService.acceptFriendRequest(userId, requesterId);
+    res.status(200).json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export async function rejectFriendRequest(req:Request, res:Response){
+  try {
+    const { userId, requesterId } = req.body;
+    const result = await userService.rejectFriendRequest(userId, requesterId);
+    res.status(200).json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export async function getFriendRequests(req:Request, res: Response){
+  try {
+    const { userId } = req.params;
+    const requests = await userService.getFriendRequests(userId);
+    res.status(200).json(requests);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
   }
 }
 
