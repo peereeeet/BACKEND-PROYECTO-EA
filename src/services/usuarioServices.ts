@@ -146,19 +146,73 @@ async listFriends(userId: string, page = 1, limit = 20, q = '') {
   return { data, page, totalPages: Math.ceil(totalItems / limit), totalItems };
 }
 
-async addFriend(userId: string, friendId: string) {
-  if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(friendId)) {
-    throw new Error('ID inválido');
+async sendFriendRequest(userId: string, targetId: string) {
+  const user = await Usuario.findById(userId);
+  const target = await Usuario.findById(targetId);
+
+  if (!user || !target) throw new Error('Usuario no encontrado');
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const targetObjectId = new mongoose.Types.ObjectId(targetId);
+  // Si ya son amigos o ya hay solicitud pendiente
+  if (target.friends.includes(userObjectId)) {
+    throw new Error('Ya sois amigos');
   }
-  if (userId === friendId) throw new Error('No puedes agregarte a ti mismo');
+  if (target.friendRequest.includes(userObjectId)) {
+    throw new Error('Ya has enviado una solicitud a este usuario');
+  }
 
-  // agrega si no existe
-  await Usuario.findByIdAndUpdate(userId, { $addToSet: { friends: friendId } });
-  // opcional: agrega recíproco
-  // await Usuario.findByIdAndUpdate(friendId, { $addToSet: { friends: userId } });
+  target.friendRequest.push(userObjectId);
+  await target.save();
 
-  return { ok: true };
-}
+  return { message: 'Solicitud de amistad enviada' };
+};
+
+// ✅ Aceptar solicitud de amistad
+async acceptFriendRequest(userId: string, requesterId: string) {
+  const user = await Usuario.findById(userId);
+  const requester = await Usuario.findById(requesterId);
+
+  if (!user || !requester) throw new Error('Usuario no encontrado');
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const requesterObjectId = new mongoose.Types.ObjectId(requesterId);
+  if (!user.friendRequest.includes(requesterObjectId)) {
+    throw new Error('No hay solicitud pendiente de este usuario');
+  }
+
+  // Añadir a amigos mutuamente
+  user.friends.push(requesterObjectId);
+  requester.friends.push(userObjectId);
+
+  // Eliminar la solicitud
+  user.friendRequest = user.friendRequest.filter(
+    (id) => id.toString() !== requesterId
+  );
+
+  await user.save();
+  await requester.save();
+
+  return { message: 'Solicitud aceptada correctamente' };
+};
+
+// ✅ Rechazar solicitud
+async rejectFriendRequest(userId: string, requesterId: string) {
+  const user = await Usuario.findById(userId);
+
+  if (!user) throw new Error('Usuario no encontrado');
+
+  user.friendRequest = user.friendRequest.filter(
+    (id) => id.toString() !== requesterId
+  );
+  await user.save();
+
+  return { message: 'Solicitud rechazada' };
+};
+
+async getFriendRequests(userId: string) {
+  const user = await Usuario.findById(userId).populate('friendRequest', 'username gmail');
+  if (!user) throw new Error('Usuario no encontrado');
+  return user.friendRequest;
+};
 
 async removeFriend(userId: string, friendId: string) {
   if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(friendId)) {
