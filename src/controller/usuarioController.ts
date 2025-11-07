@@ -80,7 +80,6 @@ export async function getUserById(req: Request, res: Response): Promise<Response
   }
 }
 
-
 export async function updateUserById(req: Request, res: Response): Promise<Response> {
   try {
     const { id } = req.params;

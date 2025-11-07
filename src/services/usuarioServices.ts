@@ -174,7 +174,6 @@ export class UserService {
     const fromOid = new Types.ObjectId(fromId);
     const toOid   = new Types.ObjectId(toId);
 
-    // Carga básica para evitar duplicados/amistad existente
     const [from, to] = await Promise.all([
       Usuario.findById(fromOid).select('_id friends sentRequests'),
       Usuario.findById(toOid).select('_id friends friendRequest')
@@ -192,21 +191,17 @@ export class UserService {
       return { ok: true, message: 'Solicitud ya enviada' };
     }
 
-    // ——— PARTE CRÍTICA: usar ObjectId y comprobar matched/modified ———
     const [r1, r2] = await Promise.all([
-      // receptor (B): añade A a friendRequest
       Usuario.updateOne(
         { _id: toOid },
         { $addToSet: { friendRequest: fromOid } }
       ),
-      // emisor (A): añade B a sentRequests
       Usuario.updateOne(
         { _id: fromOid },
         { $addToSet: { sentRequests: toOid } }
       )
     ]);
 
-    // Pequeña verificación (útil para detectar filtros que no matchean)
     const debug = {
       toMatched: r1.matchedCount ?? (r1 as any).nMatched,
       toModified: r1.modifiedCount ?? (r1 as any).nModified,
@@ -214,7 +209,6 @@ export class UserService {
       fromModified: r2.modifiedCount ?? (r2 as any).nModified,
     };
 
-    // Recuperar arrays tras la operación para asegurarnos de que quedó persistido
     const [toAfter, fromAfter] = await Promise.all([
       Usuario.findById(toOid).select('_id friendRequest').lean(),
       Usuario.findById(fromOid).select('_id sentRequests').lean()
@@ -234,7 +228,6 @@ export class UserService {
       throw new Error('Invalid user id');
     }
 
-    // userId = quien ACEPTA; requesterId = quien ENVIÓ
     const [user, requester] = await Promise.all([
       Usuario.findById(userId).select('_id friendRequest'),
       Usuario.findById(requesterId).select('_id sentRequests'),
@@ -244,18 +237,15 @@ export class UserService {
     const requesterObjectId = new mongoose.Types.ObjectId(requesterId);
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Comprobamos que realmente había solicitud pendiente
     if (!(user.friendRequest ?? []).some(id => String(id) === String(requesterId))) {
       throw new Error('No hay solicitud pendiente de este usuario');
     }
 
     await Promise.all([
-      // A: acepta → añade B a amigos y borra la solicitud entrante
       Usuario.updateOne(
         { _id: userId },
         { $addToSet: { friends: requesterObjectId }, $pull: { friendRequest: requesterObjectId } }
       ),
-      // B: emisor → añade A a amigos y borra la solicitud enviada
       Usuario.updateOne(
         { _id: requesterId },
         { $addToSet: { friends: userObjectId }, $pull: { sentRequests: userObjectId } }
@@ -271,12 +261,10 @@ export class UserService {
     }
 
     await Promise.all([
-      // El que RECHAZA: elimina la solicitud entrante
       Usuario.updateOne(
         { _id: userId },
         { $pull: { friendRequest: requesterId } }
       ),
-      // El EMISOR: elimina su solicitud enviada
       Usuario.updateOne(
         { _id: requesterId },
         { $pull: { sentRequests: userId } }
@@ -297,7 +285,6 @@ export class UserService {
       throw new Error('Invalid user id');
     }
 
-    // Devolvemos la lista de usuarios a los que YO he enviado solicitud
     const user = await Usuario.findById(userId)
       .populate('sentRequests', 'username gmail online')
       .lean();
@@ -318,8 +305,6 @@ export class UserService {
       throw new Error('ID inválido');
     }
     await Usuario.findByIdAndUpdate(userId, { $pull: { friends: friendId } });
-    // opcional: recíproco
-    // await Usuario.findByIdAndUpdate(friendId, { $pull: { friends: userId } });
     return { ok: true };
   }
 
