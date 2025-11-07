@@ -6,13 +6,17 @@ export interface IEvento {
   schedule: string;
   address?: string;
   participantes: Types.ObjectId[];
+  avgRating?: number;
+  ratingsCount?: number;
 }
 
 const eventoSchema = new Schema<IEvento>({
   name: { type: String, required: true },
   schedule: { type: String, required: true },
   address: { type: String },
-  participantes: [{ type: Schema.Types.ObjectId, ref: 'Usuario', default: [] }]
+  participantes: [{ type: Schema.Types.ObjectId, ref: 'Usuario', default: [] }],
+  avgRating: { type: Number, default: 0 },
+  ratingsCount: { type: Number, default: 0 }
 }, { timestamps: false, versionKey: false });
 
 export const Evento = model<IEvento>('Evento', eventoSchema);

@@ -293,7 +293,6 @@ export async function sendFriendRequest(req: Request, res:Response) {
   }
 };
 
-// Aceptar solicitud
 export async function acceptFriendRequest(req:Request, res:Response){
   try {
     const { userId, requesterId } = req.body;
@@ -304,7 +303,6 @@ export async function acceptFriendRequest(req:Request, res:Response){
   }
 };
 
-// Rechazar solicitud
 export async function rejectFriendRequest(req:Request, res:Response){
   try {
     const { userId, requesterId } = req.body;
@@ -315,7 +313,6 @@ export async function rejectFriendRequest(req:Request, res:Response){
   }
 };
 
-// Obtener solicitudes pendientes
 export async function getFriendRequests(req:Request, res: Response){
   try {
     const { userId } = req.params;
