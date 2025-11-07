@@ -3,6 +3,13 @@ import { Evento } from '../models/evento';
 import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 
+function oid(id: string): Types.ObjectId {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new Error(`INVALID_OBJECT_ID:${id}`);
+  }
+  return new Types.ObjectId(id);
+}
+
 export class UserService {
   async createUser(user: Partial<IUsuario>): Promise<IUsuario | null> {
     try {
@@ -122,125 +129,191 @@ export class UserService {
   return { data, page, totalPages: Math.ceil(totalItems / limit), totalItems };
 }
 
-async listFriends(userId: string, page = 1, limit = 20, q = '') {
-  if (!mongoose.Types.ObjectId.isValid(userId)) throw new Error('ID inválido');
+  async listFriends(userId: string, page = 1, limit = 20, q = '') {
+    if (!mongoose.Types.ObjectId.isValid(userId)) throw new Error('ID inválido');
 
-  const me = await Usuario.findById(userId).select('friends');
-  const friendsIds = me?.friends ?? [];
+    const me = await Usuario.findById(userId).select('friends');
+    const friendsIds = me?.friends ?? [];
 
-  const filter: any = { _id: { $in: friendsIds } };
-  if (q) {
-    filter.$or = [
-      { username: { $regex: q, $options: 'i' } },
-      { gmail: { $regex: q, $options: 'i' } }
-    ];
+    const filter: any = { _id: { $in: friendsIds } };
+    if (q) {
+      filter.$or = [
+        { username: { $regex: q, $options: 'i' } },
+        { gmail: { $regex: q, $options: 'i' } }
+      ];
+    }
+
+    const totalItems = await Usuario.countDocuments(filter);
+    const data = await Usuario.find(filter)
+      .sort({ username: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .select('_id username gmail online');
+
+    return { data, page, totalPages: Math.ceil(totalItems / limit), totalItems };
   }
 
-  const totalItems = await Usuario.countDocuments(filter);
-  const data = await Usuario.find(filter)
-    .sort({ username: 1 })
-    .skip((page - 1) * limit)
-    .limit(limit)
-    .select('_id username gmail online');
+  async sendFriendRequest(userId: string, targetId: string) {
+    const user = await Usuario.findById(userId);
+    const target = await Usuario.findById(targetId);
 
-  return { data, page, totalPages: Math.ceil(totalItems / limit), totalItems };
-}
+    if (!user || !target) throw new Error('Usuario no encontrado');
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const targetObjectId = new mongoose.Types.ObjectId(targetId);
+    // Si ya son amigos o ya hay solicitud pendiente
+    if (target.friends.includes(userObjectId)) {
+      throw new Error('Ya sois amigos');
+    }
+    if (target.friendRequest.includes(userObjectId)) {
+      throw new Error('Ya has enviado una solicitud a este usuario');
+    }
 
-async sendFriendRequest(userId: string, targetId: string) {
-  const user = await Usuario.findById(userId);
-  const target = await Usuario.findById(targetId);
+    target.friendRequest.push(userObjectId);
+    await target.save();
 
-  if (!user || !target) throw new Error('Usuario no encontrado');
-  const userObjectId = new mongoose.Types.ObjectId(userId);
-  const targetObjectId = new mongoose.Types.ObjectId(targetId);
-  // Si ya son amigos o ya hay solicitud pendiente
-  if (target.friends.includes(userObjectId)) {
-    throw new Error('Ya sois amigos');
-  }
-  if (target.friendRequest.includes(userObjectId)) {
-    throw new Error('Ya has enviado una solicitud a este usuario');
-  }
+    return { message: 'Solicitud de amistad enviada' };
+  };
 
-  target.friendRequest.push(userObjectId);
-  await target.save();
+  async acceptFriendRequest(userId: string, requesterId: string) {
+    const user = await Usuario.findById(userId);
+    const requester = await Usuario.findById(requesterId);
 
-  return { message: 'Solicitud de amistad enviada' };
-};
+    if (!user || !requester) throw new Error('Usuario no encontrado');
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const requesterObjectId = new mongoose.Types.ObjectId(requesterId);
+    if (!user.friendRequest.includes(requesterObjectId)) {
+      throw new Error('No hay solicitud pendiente de este usuario');
+    }
 
-async acceptFriendRequest(userId: string, requesterId: string) {
-  const user = await Usuario.findById(userId);
-  const requester = await Usuario.findById(requesterId);
+    user.friends.push(requesterObjectId);
+    requester.friends.push(userObjectId);
 
-  if (!user || !requester) throw new Error('Usuario no encontrado');
-  const userObjectId = new mongoose.Types.ObjectId(userId);
-  const requesterObjectId = new mongoose.Types.ObjectId(requesterId);
-  if (!user.friendRequest.includes(requesterObjectId)) {
-    throw new Error('No hay solicitud pendiente de este usuario');
-  }
+    user.friendRequest = user.friendRequest.filter(
+      (id) => id.toString() !== requesterId
+    );
 
-  user.friends.push(requesterObjectId);
-  requester.friends.push(userObjectId);
+    await user.save();
+    await requester.save();
 
-  user.friendRequest = user.friendRequest.filter(
-    (id) => id.toString() !== requesterId
-  );
+    return { message: 'Solicitud aceptada correctamente' };
+  };
 
-  await user.save();
-  await requester.save();
+  async rejectFriendRequest(userId: string, requesterId: string) {
+    const user = await Usuario.findById(userId);
 
-  return { message: 'Solicitud aceptada correctamente' };
-};
+    if (!user) throw new Error('Usuario no encontrado');
 
-async rejectFriendRequest(userId: string, requesterId: string) {
-  const user = await Usuario.findById(userId);
+    user.friendRequest = user.friendRequest.filter(
+      (id) => id.toString() !== requesterId
+    );
+    await user.save();
 
-  if (!user) throw new Error('Usuario no encontrado');
+    return { message: 'Solicitud rechazada' };
+  };
 
-  user.friendRequest = user.friendRequest.filter(
-    (id) => id.toString() !== requesterId
-  );
-  await user.save();
+  async getFriendRequests(userId: string) {
+    const user = await Usuario.findById(userId).populate('friendRequest', 'username gmail');
+    if (!user) throw new Error('Usuario no encontrado');
+    return user.friendRequest;
+  };
 
-  return { message: 'Solicitud rechazada' };
-};
+  async getSentRequests(userId: string) {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new Error('Invalid user id');
+    }
 
-async getFriendRequests(userId: string) {
-  const user = await Usuario.findById(userId).populate('friendRequest', 'username gmail');
-  if (!user) throw new Error('Usuario no encontrado');
-  return user.friendRequest;
-};
-
-async removeFriend(userId: string, friendId: string) {
-  if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(friendId)) {
-    throw new Error('ID inválido');
-  }
-  await Usuario.findByIdAndUpdate(userId, { $pull: { friends: friendId } });
-  // opcional: recíproco
-  // await Usuario.findByIdAndUpdate(friendId, { $pull: { friends: userId } });
-  return { ok: true };
-}
-
-  async setStatus(userId: string, online: boolean) {
-    const update: any = { online };
-    if (!online) update.lastSeen = new Date();
-    const doc = await Usuario.findByIdAndUpdate(userId, { $set: update }, { new: true })
-      .select('_id username online lastSeen')
+    // Usuarios que TIENEN al userId en sus solicitudes entrantes
+    const users = await Usuario.find({ friendRequests: userId })
+      .select('username gmail isOnline') // añade lo que quieras devolver
       .lean();
-    if (!doc) throw new Error('Usuario no encontrado');
-    return doc;
+
+    return users.map(u => ({
+      _id: String(u._id),
+      username: u.username,
+      gmail: u.gmail,
+      isOnline: !!(u as any).isOnline
+    }));
   }
 
-  // “Heartbeat”: marca online y actualiza lastSeen cada X minutos
-  async  heartbeat(userId: string) {
-  if (!mongoose.Types.ObjectId.isValid(userId)) {
-    throw new Error('ID inválido');
+  async removeFriend(userId: string, friendId: string) {
+    if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(friendId)) {
+      throw new Error('ID inválido');
+    }
+    await Usuario.findByIdAndUpdate(userId, { $pull: { friends: friendId } });
+    // opcional: recíproco
+    // await Usuario.findByIdAndUpdate(friendId, { $pull: { friends: userId } });
+    return { ok: true };
   }
-  return await Usuario.findByIdAndUpdate(
-    userId,
-    { online: true, lastSeen: new Date() },
-    { new: true, select: '_id username online lastSeen' }
-  );
-}
+
+    async setUserOnline(userId: string) {
+    return await Usuario.findByIdAndUpdate(
+      userId,
+      { online: true, lastSeen: new Date() },
+      { new: true }
+    );
+  }
+
+  async setUserOffline(userId: string) {
+    return await Usuario.findByIdAndUpdate(
+      userId,
+      { online: false, lastSeen: new Date() },
+      { new: true }
+    );
+  }
+
+  async heartbeat(userId: string) {
+    return await Usuario.findByIdAndUpdate(
+      userId,
+      { online: true, lastSeen: new Date() },
+      { new: true }
+    );
+  }
+
+  async unlinkFriendsBothWays(userId: string, friendId: string) {
+    const aId = oid(userId);
+    const bId = oid(friendId);
+
+    let session: mongoose.ClientSession | null = null;
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+
+      await Usuario.updateOne(
+        { _id: aId },
+        { $pull: { friends: bId, friendRequests: bId, sentRequests: bId } },
+        { session }
+      );
+
+      await Usuario.updateOne(
+        { _id: bId },
+        { $pull: { friends: aId, friendRequests: aId, sentRequests: aId } },
+        { session }
+      );
+
+      await session.commitTransaction();
+      await session.endSession();
+      session = null;
+
+    } catch (err) {
+      if (session) {
+        try { await session.abortTransaction(); await session.endSession(); } catch {}
+        session = null;
+      }
+      await Promise.all([
+        Usuario.updateOne(
+          { _id: aId },
+          { $pull: { friends: bId, friendRequests: bId, sentRequests: bId } }
+        ),
+        Usuario.updateOne(
+          { _id: bId },
+          { $pull: { friends: aId, friendRequests: aId, sentRequests: aId } }
+        )
+      ]);
+    }
+
+    const me = await Usuario.findById(aId).lean();
+    return me;
+  }
 }
 
 export default new UserService();
