@@ -2,6 +2,7 @@ import { Usuario, IUsuario } from '../models/usuario';
 import { Evento } from '../models/evento';
 import { Types } from 'mongoose';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 
 function oid(id: string): Types.ObjectId {
   if (!Types.ObjectId.isValid(id)) {
@@ -14,8 +15,10 @@ export class UserService {
   async createUser(user: Partial<IUsuario>): Promise<IUsuario | null> {
     try {
       const newUser = new Usuario(user);
+      logger.info("Usuario Creado correctamente");
       return await newUser.save();
     } catch (error) {
+      logger.error("No se pudo crear el usuario");
       throw new Error((error as Error).message);
     }
   }
@@ -30,8 +33,11 @@ export class UserService {
 
   async updateUserById(id: string, userData: Partial<IUsuario>): Promise<IUsuario | null> {
     const user = await Usuario.findById(id);
-    if (!user) return null;
+    if (!user){ 
+      logger.warn("El usuario no existe");
+      return null;}
     Object.assign(user, userData);
+    logger.info ("Usuario actualizado");
     return user.save();
   }
 
@@ -47,6 +53,7 @@ export class UserService {
     );
     if (updatedUser) {
       await Evento.findByIdAndUpdate(eventId, { $addToSet: { participantes: userId } }, { new: true });
+      logger.info(`Evento añadido correctamente al usuario ${updatedUser.username}`);
     }
     return updatedUser;
   }
@@ -56,17 +63,20 @@ export class UserService {
     try {
       const user = await Usuario.findOne({ username });
       if (!user) {
+        logger.error("Usuario no encontrado");
         return null;
       }
       
       const isPasswordValid = await user.comparePassword(password);
       if (!isPasswordValid) {
+        logger.error("Contraseña incorrecta")
         return null;
       }
     
-      
+      logger.info("El usuario ha iniciado sesion");
       return user;
     } catch (error) {
+      logger.error("Error al iniciar sesion");
       throw new Error((error as Error).message);
     }
   }
@@ -101,6 +111,7 @@ export class UserService {
   async disableUser(id: string): Promise<IUsuario | null> {
   const user = await Usuario.findById(id);
   if (!user) {
+    logger.error("El usuario no existe");
     return null;
   } 
   const updatedUser = await Usuario.findByIdAndUpdate(
@@ -109,6 +120,7 @@ export class UserService {
     { new: true }
   );
 
+  logger.info(`Usuario ${updatedUser} deshabilitado`);
   return updatedUser;
   }
 
@@ -153,63 +165,126 @@ export class UserService {
     return { data, page, totalPages: Math.ceil(totalItems / limit), totalItems };
   }
 
-  async sendFriendRequest(userId: string, targetId: string) {
-    const user = await Usuario.findById(userId);
-    const target = await Usuario.findById(targetId);
-
-    if (!user || !target) throw new Error('Usuario no encontrado');
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-    const targetObjectId = new mongoose.Types.ObjectId(targetId);
-    // Si ya son amigos o ya hay solicitud pendiente
-    if (target.friends.includes(userObjectId)) {
-      throw new Error('Ya sois amigos');
+  async sendFriendRequest(fromId: string, toId: string) {
+    if (!Types.ObjectId.isValid(fromId) || !Types.ObjectId.isValid(toId)) {
+      throw new Error('Invalid user id');
     }
-    if (target.friendRequest.includes(userObjectId)) {
-      throw new Error('Ya has enviado una solicitud a este usuario');
+    if (fromId === toId) throw new Error('No puedes enviarte solicitud a ti mismo');
+
+    const fromOid = new Types.ObjectId(fromId);
+    const toOid   = new Types.ObjectId(toId);
+
+    // Carga básica para evitar duplicados/amistad existente
+    const [from, to] = await Promise.all([
+      Usuario.findById(fromOid).select('_id friends sentRequests'),
+      Usuario.findById(toOid).select('_id friends friendRequest')
+    ]);
+    if (!from || !to) throw new Error('Usuario no encontrado');
+
+    const alreadyFriends =
+      (from.friends ?? []).some(id => String(id) === String(toId)) ||
+      (to.friends ?? []).some(id => String(id) === String(fromId));
+    if (alreadyFriends) return { ok: true, message: 'Ya sois amigos' };
+
+    const alreadyPendingIncoming = (to.friendRequest ?? []).some(id => String(id) === String(fromId));
+    const alreadyPendingOutgoing = (from.sentRequests ?? []).some(id => String(id) === String(toId));
+    if (alreadyPendingIncoming && alreadyPendingOutgoing) {
+      return { ok: true, message: 'Solicitud ya enviada' };
     }
 
-    target.friendRequest.push(userObjectId);
-    await target.save();
+    // ——— PARTE CRÍTICA: usar ObjectId y comprobar matched/modified ———
+    const [r1, r2] = await Promise.all([
+      // receptor (B): añade A a friendRequest
+      Usuario.updateOne(
+        { _id: toOid },
+        { $addToSet: { friendRequest: fromOid } }
+      ),
+      // emisor (A): añade B a sentRequests
+      Usuario.updateOne(
+        { _id: fromOid },
+        { $addToSet: { sentRequests: toOid } }
+      )
+    ]);
 
-    return { message: 'Solicitud de amistad enviada' };
-  };
+    // Pequeña verificación (útil para detectar filtros que no matchean)
+    const debug = {
+      toMatched: r1.matchedCount ?? (r1 as any).nMatched,
+      toModified: r1.modifiedCount ?? (r1 as any).nModified,
+      fromMatched: r2.matchedCount ?? (r2 as any).nMatched,
+      fromModified: r2.modifiedCount ?? (r2 as any).nModified,
+    };
+
+    // Recuperar arrays tras la operación para asegurarnos de que quedó persistido
+    const [toAfter, fromAfter] = await Promise.all([
+      Usuario.findById(toOid).select('_id friendRequest').lean(),
+      Usuario.findById(fromOid).select('_id sentRequests').lean()
+    ]);
+
+    return {
+      ok: true,
+      message: 'Solicitud enviada',
+      debug,
+      toFriendRequestCount: (toAfter?.friendRequest ?? []).length,
+      fromSentRequestsCount: (fromAfter?.sentRequests ?? []).length
+    };
+  }
 
   async acceptFriendRequest(userId: string, requesterId: string) {
-    const user = await Usuario.findById(userId);
-    const requester = await Usuario.findById(requesterId);
+    if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(requesterId)) {
+      throw new Error('Invalid user id');
+    }
 
+    // userId = quien ACEPTA; requesterId = quien ENVIÓ
+    const [user, requester] = await Promise.all([
+      Usuario.findById(userId).select('_id friendRequest'),
+      Usuario.findById(requesterId).select('_id sentRequests'),
+    ]);
     if (!user || !requester) throw new Error('Usuario no encontrado');
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+
     const requesterObjectId = new mongoose.Types.ObjectId(requesterId);
-    if (!user.friendRequest.includes(requesterObjectId)) {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Comprobamos que realmente había solicitud pendiente
+    if (!(user.friendRequest ?? []).some(id => String(id) === String(requesterId))) {
       throw new Error('No hay solicitud pendiente de este usuario');
     }
 
-    user.friends.push(requesterObjectId);
-    requester.friends.push(userObjectId);
-
-    user.friendRequest = user.friendRequest.filter(
-      (id) => id.toString() !== requesterId
-    );
-
-    await user.save();
-    await requester.save();
+    await Promise.all([
+      // A: acepta → añade B a amigos y borra la solicitud entrante
+      Usuario.updateOne(
+        { _id: userId },
+        { $addToSet: { friends: requesterObjectId }, $pull: { friendRequest: requesterObjectId } }
+      ),
+      // B: emisor → añade A a amigos y borra la solicitud enviada
+      Usuario.updateOne(
+        { _id: requesterId },
+        { $addToSet: { friends: userObjectId }, $pull: { sentRequests: userObjectId } }
+      ),
+    ]);
 
     return { message: 'Solicitud aceptada correctamente' };
-  };
+  }
 
   async rejectFriendRequest(userId: string, requesterId: string) {
-    const user = await Usuario.findById(userId);
+    if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(requesterId)) {
+      throw new Error('Invalid user id');
+    }
 
-    if (!user) throw new Error('Usuario no encontrado');
-
-    user.friendRequest = user.friendRequest.filter(
-      (id) => id.toString() !== requesterId
-    );
-    await user.save();
+    await Promise.all([
+      // El que RECHAZA: elimina la solicitud entrante
+      Usuario.updateOne(
+        { _id: userId },
+        { $pull: { friendRequest: requesterId } }
+      ),
+      // El EMISOR: elimina su solicitud enviada
+      Usuario.updateOne(
+        { _id: requesterId },
+        { $pull: { sentRequests: userId } }
+      ),
+    ]);
 
     return { message: 'Solicitud rechazada' };
-  };
+  }
 
   async getFriendRequests(userId: string) {
     const user = await Usuario.findById(userId).populate('friendRequest', 'username gmail');
@@ -222,17 +297,20 @@ export class UserService {
       throw new Error('Invalid user id');
     }
 
-    // Usuarios que TIENEN al userId en sus solicitudes entrantes
-    const users = await Usuario.find({ friendRequests: userId })
-      .select('username gmail isOnline') // añade lo que quieras devolver
+    // Devolvemos la lista de usuarios a los que YO he enviado solicitud
+    const user = await Usuario.findById(userId)
+      .populate('sentRequests', 'username gmail online')
       .lean();
 
-    return users.map(u => ({
+    if (!user) throw new Error('Usuario no encontrado');
+
+    const arr = (user.sentRequests ?? []).map((u: any) => ({
       _id: String(u._id),
       username: u.username,
       gmail: u.gmail,
-      isOnline: !!(u as any).isOnline
+      isOnline: !!(u.online ?? u.isOnline)
     }));
+    return arr;
   }
 
   async removeFriend(userId: string, friendId: string) {
@@ -280,13 +358,13 @@ export class UserService {
 
       await Usuario.updateOne(
         { _id: aId },
-        { $pull: { friends: bId, friendRequests: bId, sentRequests: bId } },
+        { $pull: { friends: bId, friendRequest: bId, sentRequests: bId } },
         { session }
       );
 
       await Usuario.updateOne(
         { _id: bId },
-        { $pull: { friends: aId, friendRequests: aId, sentRequests: aId } },
+        { $pull: { friends: aId, friendRequest: aId, sentRequests: aId } },
         { session }
       );
 
@@ -302,11 +380,11 @@ export class UserService {
       await Promise.all([
         Usuario.updateOne(
           { _id: aId },
-          { $pull: { friends: bId, friendRequests: bId, sentRequests: bId } }
+          { $pull: { friends: bId, friendRequest: bId, sentRequests: bId } }
         ),
         Usuario.updateOne(
           { _id: bId },
-          { $pull: { friends: aId, friendRequests: aId, sentRequests: aId } }
+          { $pull: { friends: aId, friendRequest: aId, sentRequests: aId } }
         )
       ]);
     }
