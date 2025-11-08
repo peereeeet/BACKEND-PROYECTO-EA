@@ -3,6 +3,14 @@ import { Evento } from '../models/evento';
 import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
+import crypto from 'crypto';
+
+function oid(id: string): Types.ObjectId {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new Error(`INVALID_OBJECT_ID:${id}`);
+  }
+  return new Types.ObjectId(id);
+}
 
 export class UserService {
 
@@ -23,6 +31,17 @@ export class UserService {
 
   async getUserById(id: string): Promise<IUsuario | null> {
     return await Usuario.findById(id);
+  }
+
+  async listUserEvents(userId: string) {
+    const _id = oid(userId);
+
+    const Evento = mongoose.models.Evento || mongoose.model('Evento');
+    const evs = await Evento.find({ participants: _id })
+      .select('titulo title fecha date lugar location participants')
+      .lean();
+
+    return evs;
   }
 
   async updateUserById(id: string, userData: Partial<IUsuario>): Promise<IUsuario | null> {
