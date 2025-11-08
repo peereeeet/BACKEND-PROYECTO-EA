@@ -7,6 +7,7 @@ import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
 
 const userService = new UserService();
+const Evento = mongoose.model('Evento');
 
 export async function createUser(req: Request, res: Response): Promise<Response> {
   const errors = validationResult(req);
@@ -80,6 +81,92 @@ export async function getUserById(req: Request, res: Response): Promise<Response
   }
 }
 
+export const getUserEvents = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, message: 'ID inválido' });
+    }
+    const userId = new mongoose.Types.ObjectId(id);
+
+    const events = await Evento.find({
+      $or: [
+        { participantes: userId },
+        { 'participantes.user': userId },
+        { asistentes: userId },
+        { 'asistentes.user': userId },
+        { participants: userId },
+        { 'participants.user': userId },
+        { members: userId },
+        { 'members.user': userId },
+      ]
+    })
+    .select('name schedule address titulo title fecha date lugar location') 
+    .lean();
+
+    return res.json({ ok: true, data: events || [] });
+  } catch (err) {
+    console.error('getUserEvents error:', err);
+    return res.status(500).json({ ok: false, message: 'No se pudieron listar los eventos' });
+  }
+};
+
+export async function updateOwnProfile(req: Request, res: Response): Promise<Response> {
+  try {
+    const authId = (req as any)?.user?.payload?.id;
+    const { id } = req.params;
+
+    if (!authId || authId !== id) {
+      return res.status(403).json({ error: 'Solo puedes modificar tu propio perfil' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
+
+    const { username, gmail, password, birthday } = req.body as Partial<IUsuario>;
+
+    const user = await Usuario.findById(id);
+    if (!user) return res.status(404).json({ error: 'USUARIO NO ENCONTRADO' });
+
+    if (typeof username === 'string') user.username = username;
+    if (typeof gmail === 'string')    user.gmail = gmail;
+    if (birthday !== undefined)       user.birthday = new Date(String(birthday)) as any;
+    if (typeof password === 'string' && password.trim() !== '') {
+      user.password = password;
+    }
+
+    const saved = await user.save();
+    const userObj = saved.toObject();
+    delete (userObj as any).password;
+
+    return res.status(200).json({ ok: true, user: userObj });
+  } catch (e: any) {
+    if (e?.code === 11000) {
+      return res.status(409).json({ ok: false, error: 'Usuario o correo ya en uso' });
+    }
+    return res.status(500).json({ ok: false, error: 'No se pudo actualizar el perfil' });
+  }
+}
+
+export const getPlainPassword = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, message: 'ID inválido' });
+    }
+    const user = await mongoose.model('Usuario').findById(id).select('+plainPassword +password').lean();
+    if (!user) return res.status(404).json({ ok: false, message: 'Usuario no encontrado' });
+
+    if ((user as any).plainPassword) {
+      return res.json({ ok: true, plainPassword: (user as any).plainPassword });
+    }
+
+    return res.json({ ok: true, hashed: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: 'No se pudo obtener la contraseña' });
+  }
+};
+
 export async function updateUserById(req: Request, res: Response): Promise<Response> {
   try {
     const { id } = req.params;
@@ -102,7 +189,6 @@ export async function deleteUserById(req: Request, res: Response): Promise<Respo
     return res.status(400).json({ message: (error as Error).message });
   }
 }
-
 
 export async function addEventToUser(req: Request, res: Response): Promise<Response> {
   try {
