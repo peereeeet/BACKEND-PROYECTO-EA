@@ -5,122 +5,26 @@ import {
   getEventoById,
   updateEventoById,
   checkEventNameExists,
-  deleteEventoById
+  deleteEventoById,
+  joinEvento,      
+  leaveEvento,    
+  getMisEventos   
 } from '../controller/eventoController';
+import { authenticateToken } from '../auth/middleware';
 
 const router = Router();
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     Evento:
- *       type: object
- *       required:
- *         - name
- *         - date
- *       properties:
- *         id:
- *           type: string
- *           description: ID generado por MongoDB
- *         name:
- *           type: string
- *         description:
- *           type: string
- *         date:
- *           type: string
- *           format: date-time
- *         location:
- *           type: string
- *       example:
- *         name: "Conferencia de Tecnología"
- *         description: "Una conferencia sobre las últimas tendencias tecnológicas"
- *         date: "2024-01-15T10:00:00Z"
- *         location: "Auditorio Principal"
- */
-
-/**
- * @swagger
- * /api/event:
- *   get:
- *     summary: Obtener todos los eventos
- *     tags: [Eventos]
- *     responses:
- *       200:
- *         description: Lista de eventos obtenida exitosamente
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Evento'
- */
+// Rutas públicas (sin autenticación)
 router.get('/', getAllEventos);
-
-/**
- * @swagger
- * /api/event:
- *   post:
- *     summary: Crear un nuevo evento
- *     tags: [Eventos]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Evento'
- *     responses:
- *       201:
- *         description: Evento creado exitosamente
- *       400:
- *         description: Error en los datos del evento
- */
-router.post('/', createEvento);
-
-/**
- * @swagger
- * /api/event/{id}:
- *   get:
- *     summary: Obtener un evento por ID
- *     tags: [Eventos]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID del evento
- *     responses:
- *       200:
- *         description: Evento encontrado
- *       404:
- *         description: Evento no encontrado
- */
 router.get('/:id', getEventoById);
 
-router.put('/:id', updateEventoById);
-
-/**
- * @swagger
- * /api/event/{id}:
- *   delete:
- *     summary: Eliminar un evento por ID
- *     tags: [Eventos]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID del evento
- *     responses:
- *       200:
- *         description: Evento eliminado exitosamente
- *       404:
- *         description: Evento no encontrado
- */
-router.delete('/:id', deleteEventoById);
-
+// Rutas protegidas (requieren autenticación)
+router.post('/', authenticateToken, createEvento); 
+router.put('/:id', authenticateToken, updateEventoById);
+router.delete('/:id', authenticateToken, deleteEventoById); 
 router.post('/check-name', checkEventNameExists);
+router.post('/:id/join', authenticateToken, joinEvento);
+router.post('/:id/leave', authenticateToken, leaveEvento);
+router.get('/user/my-events', authenticateToken, getMisEventos);
 
 export default router;
