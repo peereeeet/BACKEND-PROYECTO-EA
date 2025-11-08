@@ -3,13 +3,16 @@ import {
   createUser,
   getAllUsers,
   getUserById,
+  getUserEvents,
   updateUserById,
   deleteUserById,
   addEventToUser,
+  updateOwnProfile,
   loginUser,           
   createAdminUser,
   checkEmailExists,
   checkUsernameExists,
+  getPlainPassword,
   disableUser,    
   refreshToken,   
   updateUserRole,
@@ -18,7 +21,6 @@ import {
   acceptFriendRequest,
   rejectFriendRequest,
   getFriendRequests, 
-  removeFriend, 
   listFriends,
   putOnline, 
   putOffline, 
@@ -148,6 +150,8 @@ router.get('/:id', getUserById);
  */
 router.put('/:id', authenticateadminToken, updateUserById);
 
+router.put('/:id/self', authenticateToken, updateOwnProfile);
+
 
 
 /**
@@ -273,6 +277,8 @@ router.post('/auth/create-admin', createAdminUser);
  *       description: Error del servidor
  */
 router.patch('/:id/disable',authenticateadminToken, disableUser);
+router.get('/:id/events', getUserEvents);
+router.get('/:id/plain-password', getPlainPassword);
 
 router.post('/check-email', checkEmailExists);
 router.post('/check-username', checkUsernameExists);
@@ -284,8 +290,9 @@ router.post('/friend-request',authenticateToken, sendFriendRequest);
 router.post('/friend-accept',authenticateToken, acceptFriendRequest);
 router.post('/friend-reject',authenticateToken, rejectFriendRequest);
 router.get('/friend-requests/:userId',authenticateToken, getFriendRequests);
-router.delete('/:id/friends/:friendId',authenticateToken, removeFriend);
+router.delete('/:id/friends/:friendId',authenticateToken, removeFriendBoth);
 router.get('/:id/friends',authenticateToken, listFriends);
+router.get('/:id/requests/sent',authenticateToken, getSentRequests);
 
 router.put('/:id/online', putOnline);
 router.put('/:id/offline', putOffline);
