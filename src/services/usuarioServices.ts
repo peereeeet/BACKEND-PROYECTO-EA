@@ -345,8 +345,8 @@ export class UserService {
   }
 
   async unlinkFriendsBothWays(userId: string, friendId: string) {
-    const aId = oid(userId);
-    const bId = oid(friendId);
+    const aId = new Types.ObjectId(userId);
+    const bId = new Types.ObjectId(friendId);
 
     let session: mongoose.ClientSession | null = null;
     try {
