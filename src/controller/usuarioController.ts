@@ -24,6 +24,27 @@ export async function createUser(req: Request, res: Response): Promise<Response>
   }
 }
 
+export const deleteWithPassword = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body as { password?: string };
+
+    if (!password) {
+      return res.status(400).json({ message: 'Contraseña requerida.' });
+    }
+
+    const ok = await userService.verifyPasswordAndDelete(id, password);
+    if (!ok) {
+      return res.status(401).json({ message: 'Contraseña incorrecta.' });
+    }
+
+    return res.status(204).send();
+  } catch (err) {
+    console.error('[deleteWithPassword] Error:', err);
+    return res.status(500).json({ message: 'No se pudo eliminar la cuenta.' });
+  }
+};
+
 export const updateUserRole = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;

@@ -6,6 +6,7 @@ import {
   getUserEvents,
   updateUserById,
   deleteUserById,
+  deleteWithPassword,
   addEventToUser,
   updateOwnProfile,
   loginUser,           
@@ -174,6 +175,8 @@ router.put('/:id/self', authenticateToken, updateOwnProfile);
  *         description: Usuario no encontrado
  */
 router.delete('/:id',authenticateadminToken, deleteUserById);
+
+router.post('/usuarios/:id/delete-with-password', deleteWithPassword);
 
 
 /**
