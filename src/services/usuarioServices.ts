@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 function oid(id: string): Types.ObjectId {
   if (!Types.ObjectId.isValid(id)) {
@@ -57,6 +58,30 @@ export class UserService {
   async deleteUserById(id: string): Promise<IUsuario | null> {
     return await Usuario.findByIdAndDelete(id);
   }
+
+  async verifyPasswordAndDelete(id: string, password: string): Promise<boolean> {
+    const user = await Usuario.findById(id).exec();
+    if (!user) return false;
+
+    const stored = (user as any).password;
+
+    let match = false;
+    if (stored && typeof stored === 'string') {
+      if (stored.startsWith('$2a$') || stored.startsWith('$2b$') || stored.startsWith('$2y$')) {
+        try {
+          match = await bcrypt.compare(password, stored);
+        } catch {
+          match = false;
+        }
+      } else {
+        match = stored === password;
+      }
+    }
+
+    if (!match) return false;
+    await Usuario.findByIdAndDelete(id).exec();
+    return true;
+  };
 
   async addEventToUser(userId: string, eventId: string): Promise<IUsuario | null> {
     const updatedUser = await Usuario.findByIdAndUpdate(

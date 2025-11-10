@@ -25,7 +25,7 @@ function canModifyEvento(userRol: string, userId: string, creadorId: string): bo
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
     const { name, schedule, address, participantes } = req.body;
-    const creadorId = (req as any).user?.payload?.id; // 👈 Obtenemos el ID del usuario autenticado
+    const creadorId = (req as any).user?.payload?.id; 
 
     if (!creadorId) {
       return res.status(401).json({ message: 'No autenticado' });
@@ -101,7 +101,7 @@ export async function deleteEventoById(req: Request, res: Response): Promise<Res
   try {
     const { id } = req.params;
     const userId = (req as any).user?.payload?.id;
-    const userRol = (req as any).user?.payload?.rol; // 👈 Obtener rol del usuario
+    const userRol = (req as any).user?.payload?.rol;
 
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
@@ -110,7 +110,6 @@ export async function deleteEventoById(req: Request, res: Response): Promise<Res
     const evento = await Evento.findById(id).lean().exec();
     if (!evento) return res.status(404).json({ message: 'EVENTO NO ENCONTRADO' });
 
-    //Verificar que el usuario es admin O creador
     if (!canModifyEvento(userRol, userId, evento.creador.toString())) {
       return res.status(403).json({ 
         message: 'Solo el creador o un administrador pueden eliminar este evento' 
@@ -136,7 +135,7 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
   try {
     const { id } = req.params;
     const userId = (req as any).user?.payload?.id;
-    const userRol = (req as any).user?.payload?.rol; // 👈 Obtener rol del usuario
+    const userRol = (req as any).user?.payload?.rol;
 
     if (!userId) {
       res.status(401).json({ message: 'No autenticado' });
@@ -149,7 +148,6 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Verificar que el usuario es admin O creador
     if (!canModifyEvento(userRol, userId, evento.creador.toString())) {
       res.status(403).json({ 
         message: 'Solo el creador o un administrador pueden editar este evento' 
@@ -171,7 +169,6 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
   }
 };
 
-//Unirse a un evento
 export const joinEvento = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -188,7 +185,6 @@ export const joinEvento = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Verificar si ya está inscrito
     if (evento.participantes.some(p => p.toString() === userId)) {
       res.status(400).json({ message: 'Ya estás inscrito en este evento' });
       return;
@@ -196,7 +192,6 @@ export const joinEvento = async (req: Request, res: Response): Promise<void> => 
 
     const updatedEvento = await eventoService.joinEvento(id, userId);
     
-    // Actualizar eventos del usuario
     await Usuario.findByIdAndUpdate(userId, { $addToSet: { eventos: id } });
 
     logger.info(`Usuario ${userId} se unió al evento ${id}`);
@@ -207,7 +202,6 @@ export const joinEvento = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-//Salir de un evento
 export const leaveEvento = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -224,7 +218,6 @@ export const leaveEvento = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Verificar si está inscrito
     if (!evento.participantes.some(p => p.toString() === userId)) {
       res.status(400).json({ message: 'No estás inscrito en este evento' });
       return;
@@ -232,7 +225,6 @@ export const leaveEvento = async (req: Request, res: Response): Promise<void> =>
 
     const updatedEvento = await eventoService.leaveEvento(id, userId);
     
-    // Actualizar eventos del usuario
     await Usuario.findByIdAndUpdate(userId, { $pull: { eventos: id } });
 
     logger.info(`Usuario ${userId} salió del evento ${id}`);
@@ -243,7 +235,6 @@ export const leaveEvento = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-//Obtener eventos del usuario (creados + inscritos)
 export const getMisEventos = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.payload?.id;

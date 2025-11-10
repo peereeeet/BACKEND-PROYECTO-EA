@@ -14,7 +14,7 @@ export class EventoService {
   async deleteEventoById(id: string): Promise<IEvento | null> {
     return await Evento.findByIdAndDelete(id);
   }
-  // Join an evento
+
    async joinEvento(eventoId: string, userId: string): Promise<IEvento | null> {
     return await Evento.findByIdAndUpdate(
       eventoId,
@@ -22,7 +22,7 @@ export class EventoService {
       { new: true }
     ).populate('creador', 'username gmail');
   }
-  // Leave an evento
+
    async leaveEvento(eventoId: string, userId: string): Promise<IEvento | null> {
     return await Evento.findByIdAndUpdate(
       eventoId,
@@ -30,7 +30,7 @@ export class EventoService {
       { new: true }
     ).populate('creador', 'username gmail');
   }
-  // Get eventos by creator
+
   async getEventosByCreador(creadorId: string): Promise<IEvento[]> {
     return await Evento.find({ creador: creadorId }).populate('creador', 'username gmail');
   }
