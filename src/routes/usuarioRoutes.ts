@@ -7,6 +7,8 @@ import {
   updateUserById,
   deleteUserById,
   deleteWithPassword,
+  forgotPassword,
+  resetPassword,
   addEventToUser,
   updateOwnProfile,
   loginUser,           
@@ -177,6 +179,9 @@ router.put('/:id/self', authenticateToken, updateOwnProfile);
 router.delete('/:id',authenticateadminToken, deleteUserById);
 
 router.post('/usuarios/:id/delete-with-password', deleteWithPassword);
+
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 
 /**

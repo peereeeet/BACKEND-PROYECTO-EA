@@ -45,6 +45,37 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
   }
 };
 
+export async function forgotPassword(req: Request, res: Response){
+  try{
+    const { emailOrUsername } = req.body || {};
+    if(!emailOrUsername || typeof emailOrUsername !== 'string'){
+      return res.status(400).json({ message: 'Falta email o usuario.' });
+    }
+
+    const { devToken } = await userService.createPasswordResetToken(emailOrUsername);
+
+    const payload:any = { message: 'Si el usuario existe, se ha enviado un email con instrucciones.' };
+    if(process.env.NODE_ENV !== 'production') payload.devToken = devToken;
+
+    return res.json(payload);
+  }catch(err:any){
+    return res.json({ message: 'Si el usuario existe, se ha enviado un email con instrucciones.' });
+  }
+}
+
+export async function resetPassword(req: Request, res: Response){
+  try{
+    const { token, newPassword } = req.body || {};
+    if(!token || !newPassword){
+      return res.status(400).json({ message: 'Faltan datos.' });
+    }
+    await userService.resetPasswordWithToken(token, newPassword);
+    return res.json({ ok: true });
+  }catch(err:any){
+    return res.status(400).json({ message: err?.message || 'Token inválido o caducado.' });
+  }
+}
+
 export const updateUserRole = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;

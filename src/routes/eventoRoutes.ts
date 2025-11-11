@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createEvento,
+  createEventoFromPanel,
   getAllEventos,
   getEventoById,
   updateEventoById,
@@ -20,6 +21,7 @@ router.get('/:id', getEventoById);
 
 // Rutas protegidas (requieren autenticación)
 router.post('/', authenticateToken, createEvento); 
+router.post('/create-from-panel', authenticateToken, createEventoFromPanel);
 router.put('/:id', authenticateToken, updateEventoById);
 router.delete('/:id', authenticateToken, deleteEventoById); 
 router.post('/check-name', checkEventNameExists);
