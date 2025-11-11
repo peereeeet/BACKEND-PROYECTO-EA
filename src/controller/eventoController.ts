@@ -60,6 +60,32 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
   }
 }
 
+export async function createEventoFromPanel(req: Request, res: Response) {
+  try {
+    const { name, creador, address, schedule, participantes } = req.body || {};
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ message: 'El nombre del evento es obligatorio.' });
+    }
+    if (!creador || typeof creador !== 'string') {
+      return res.status(400).json({ message: 'Debes indicar el ID del creador del evento.' });
+    }
+
+    const evento = await eventoService.createEventoWithCreator({
+      name,
+      creador,
+      address,
+      schedule,
+      participantes: Array.isArray(participantes) ? participantes : [],
+    });
+
+    return res.status(201).json(evento);
+  } catch (err: any) {
+    console.error('createEventoFromPanel', err);
+    return res.status(500).json({ message: err?.message || 'No se pudo crear el evento (panel).' });
+  }
+}
+
 export const getAllEventos = async (req: Request, res: Response): Promise<void> => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
