@@ -5,6 +5,7 @@ import { validationResult } from 'express-validator';
 import Usuario from '../models/usuario';
 import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
+import {logger } from '../config/logger';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');

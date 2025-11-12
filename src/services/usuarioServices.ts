@@ -81,7 +81,7 @@ export class UserService {
     }
 
     if (!match) return false;
-    await Usuario.findByIdAndDelete(id).exec();
+    await this.disableUser(id);
     return true;
   };
 
