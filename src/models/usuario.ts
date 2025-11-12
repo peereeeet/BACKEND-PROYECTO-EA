@@ -6,6 +6,8 @@ export interface IUsuario {
   username: string;
   gmail: string;
   password: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpires?: Date | null;
   birthday: Date;
   eventos: Types.ObjectId[];
   rol: 'admin' | 'usuario';
@@ -23,6 +25,8 @@ const usuarioSchema = new Schema<IUsuario>({
   username: { type: String, required: true, unique: true },
   gmail: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  resetPasswordToken: { type: String, default: null },
+  resetPasswordExpires: { type: Date, default: null },
   birthday: { type: Date, required: true },
   isActive: { type: Boolean, default: true },
   friends: [{ type: Schema.Types.ObjectId, ref: 'Usuario', index: true }],

@@ -4,6 +4,9 @@ import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+
+function sha256(v:string){ return crypto.createHash('sha256').update(v).digest('hex'); }
 
 function oid(id: string): Types.ObjectId {
   if (!Types.ObjectId.isValid(id)) {
@@ -57,6 +60,30 @@ export class UserService {
   async deleteUserById(id: string): Promise<IUsuario | null> {
     return await Usuario.findByIdAndDelete(id);
   }
+
+  async verifyPasswordAndDelete(id: string, password: string): Promise<boolean> {
+    const user = await Usuario.findById(id).exec();
+    if (!user) return false;
+
+    const stored = (user as any).password;
+
+    let match = false;
+    if (stored && typeof stored === 'string') {
+      if (stored.startsWith('$2a$') || stored.startsWith('$2b$') || stored.startsWith('$2y$')) {
+        try {
+          match = await bcrypt.compare(password, stored);
+        } catch {
+          match = false;
+        }
+      } else {
+        match = stored === password;
+      }
+    }
+
+    if (!match) return false;
+    await this.disableUser(id);
+    return true;
+  };
 
   async addEventToUser(userId: string, eventId: string): Promise<IUsuario | null> {
     const updatedUser = await Usuario.findByIdAndUpdate(
@@ -114,6 +141,21 @@ export class UserService {
     } catch (error) {
       console.error('Error creando usuario admin:', error);
     }
+  }
+
+  async findUserByEmailOrUsername(emailOrUsername: string) {
+    if (!emailOrUsername || typeof emailOrUsername !== 'string') return null;
+    return await Usuario.findOne({
+      $or: [{ gmail: emailOrUsername }, { username: emailOrUsername }]
+    }).select('_id username gmail').lean();
+  }
+
+  async setPasswordByUserId(userId: string, newPassword: string) {
+    if (!userId || !newPassword) throw new Error('Faltan datos');
+    const user = await Usuario.findById(userId);
+    if (!user) throw new Error('Usuario no encontrado');
+    user.password = newPassword; // asume hash en pre-save del modelo
+    await user.save();
   }
 
   /**
@@ -345,8 +387,8 @@ export class UserService {
   }
 
   async unlinkFriendsBothWays(userId: string, friendId: string) {
-    const aId = oid(userId);
-    const bId = oid(friendId);
+    const aId = new Types.ObjectId(userId);
+    const bId = new Types.ObjectId(friendId);
 
     let session: mongoose.ClientSession | null = null;
     try {

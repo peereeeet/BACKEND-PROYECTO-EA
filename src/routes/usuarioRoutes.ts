@@ -6,6 +6,9 @@ import {
   getUserEvents,
   updateUserById,
   deleteUserById,
+  deleteWithPassword,
+  checkUserExistsForReset,
+  directResetPassword,
   addEventToUser,
   updateOwnProfile,
   loginUser,           
@@ -175,6 +178,10 @@ router.put('/:id/self', authenticateToken, updateOwnProfile);
  */
 router.delete('/:id',authenticateadminToken, deleteUserById);
 
+router.patch('/:id/delete-with-password', deleteWithPassword);
+
+router.post('/forgot-password/check', checkUserExistsForReset);
+router.post('/reset-password/direct', directResetPassword);
 
 /**
  * @swagger
