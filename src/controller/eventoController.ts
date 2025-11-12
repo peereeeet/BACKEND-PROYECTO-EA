@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { EventoService } from '../services/eventoServices';
 import { Usuario } from '../models/usuario';
 import { Evento } from '../models/evento';
-import {logger} from '../config/logger';
+import { logger } from '../config/logger';
 
 const eventoService = new EventoService();
 
@@ -17,9 +17,20 @@ function normalizeParticipantes(p: any): string[] {
   return [];
 }
 
+// Verificar si el usuario es admin o creador
+function canModifyEvento(userRol: string, userId: string, creadorId: string): boolean {
+  return userRol === 'admin' || userId === creadorId.toString();
+}
+
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
     const { name, schedule, address, participantes } = req.body;
+    const creadorId = (req as any).user?.payload?.id; 
+
+    if (!creadorId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
     const scheduleStr = normalizeSchedule(schedule);
     const participantesIds = normalizeParticipantes(participantes);
 
@@ -27,7 +38,8 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       name,
       schedule: scheduleStr,
       address,
-      participantes: participantesIds as any
+      participantes: participantesIds as any,
+      creador: creadorId 
     });
 
     if (participantesIds.length > 0) {
@@ -39,11 +51,38 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
 
     const populated = await Evento.findById(created._id)
       .populate('participantes', 'username gmail')
+      .populate('creador', 'username gmail')
       .exec();
 
     return res.status(201).json(populated ?? created);
   } catch (error) {
     return res.status(400).json({ message: (error as Error).message });
+  }
+}
+
+export async function createEventoFromPanel(req: Request, res: Response) {
+  try {
+    const { name, creador, address, schedule, participantes } = req.body || {};
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ message: 'El nombre del evento es obligatorio.' });
+    }
+    if (!creador || typeof creador !== 'string') {
+      return res.status(400).json({ message: 'Debes indicar el ID del creador del evento.' });
+    }
+
+    const evento = await eventoService.createEventoWithCreator({
+      name,
+      creador,
+      address,
+      schedule,
+      participantes: Array.isArray(participantes) ? participantes : [],
+    });
+
+    return res.status(201).json(evento);
+  } catch (err: any) {
+    console.error('createEventoFromPanel', err);
+    return res.status(500).json({ message: err?.message || 'No se pudo crear el evento (panel).' });
   }
 }
 
@@ -55,7 +94,11 @@ export const getAllEventos = async (req: Request, res: Response): Promise<void> 
 
     const [total, eventos] = await Promise.all([
       Evento.countDocuments(),
-      Evento.find().skip(skip).limit(limit).populate('participantes')
+      Evento.find()
+        .skip(skip)
+        .limit(limit)
+        .populate('participantes', 'username gmail')
+        .populate('creador', 'username gmail')  
     ]);
 
     res.status(200).json({
@@ -83,18 +126,31 @@ export async function getEventoById(req: Request, res: Response): Promise<Respon
 export async function deleteEventoById(req: Request, res: Response): Promise<Response> {
   try {
     const { id } = req.params;
+    const userId = (req as any).user?.payload?.id;
+    const userRol = (req as any).user?.payload?.rol;
 
-    const toDelete = await Evento.findById(id).lean().exec();
-    if (!toDelete) return res.status(404).json({ message: 'EVENTO NO ENCONTRADO' });
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
 
-    if (Array.isArray(toDelete.participantes) && toDelete.participantes.length > 0) {
+    const evento = await Evento.findById(id).lean().exec();
+    if (!evento) return res.status(404).json({ message: 'EVENTO NO ENCONTRADO' });
+
+    if (!canModifyEvento(userRol, userId, evento.creador.toString())) {
+      return res.status(403).json({ 
+        message: 'Solo el creador o un administrador pueden eliminar este evento' 
+      });
+    }
+
+    if (Array.isArray(evento.participantes) && evento.participantes.length > 0) {
       await Usuario.updateMany(
-        { _id: { $in: toDelete.participantes } },
-        { $pull: { eventos: toDelete._id } }
+        { _id: { $in: evento.participantes } },
+        { $pull: { eventos: evento._id } }
       ).exec();
     }
 
     const deleted = await eventoService.deleteEventoById(id);
+    logger.info(`Evento ${id} eliminado por usuario ${userId} (${userRol})`);
     return res.status(200).json(deleted);
   } catch (error) {
     return res.status(400).json({ message: (error as Error).message });
@@ -104,19 +160,132 @@ export async function deleteEventoById(req: Request, res: Response): Promise<Res
 export const updateEventoById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const updatedEvento = await Evento.findByIdAndUpdate(id, req.body, {
-      new: true
-    }).populate('participantes');
+    const userId = (req as any).user?.payload?.id;
+    const userRol = (req as any).user?.payload?.rol;
 
-    if (!updatedEvento) {
+    if (!userId) {
+      res.status(401).json({ message: 'No autenticado' });
+      return;
+    }
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
       res.status(404).json({ message: 'Evento no encontrado' });
       return;
     }
 
+    if (!canModifyEvento(userRol, userId, evento.creador.toString())) {
+      res.status(403).json({ 
+        message: 'Solo el creador o un administrador pueden editar este evento' 
+      });
+      return;
+    }
+
+    const updatedEvento = await Evento.findByIdAndUpdate(id, req.body, {
+      new: true
+    })
+      .populate('participantes')
+      .populate('creador', 'username gmail');
+
+    logger.info(`Evento ${id} actualizado por usuario ${userId} (${userRol})`);
     res.status(200).json(updatedEvento);
   } catch (error) {
     logger.error(`Error al actualizar evento:, ${error}`);
     res.status(500).json({ message: 'Error al actualizar evento', error });
+  }
+};
+
+export const joinEvento = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      res.status(401).json({ message: 'No autenticado' });
+      return;
+    }
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      res.status(404).json({ message: 'Evento no encontrado' });
+      return;
+    }
+
+    if (evento.participantes.some(p => p.toString() === userId)) {
+      res.status(400).json({ message: 'Ya estás inscrito en este evento' });
+      return;
+    }
+
+    const updatedEvento = await eventoService.joinEvento(id, userId);
+    
+    await Usuario.findByIdAndUpdate(userId, { $addToSet: { eventos: id } });
+
+    logger.info(`Usuario ${userId} se unió al evento ${id}`);
+    res.status(200).json(updatedEvento);
+  } catch (error) {
+    logger.error(`Error al unirse al evento: ${error}`);
+    res.status(500).json({ message: 'Error al unirse al evento', error });
+  }
+};
+
+export const leaveEvento = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      res.status(401).json({ message: 'No autenticado' });
+      return;
+    }
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      res.status(404).json({ message: 'Evento no encontrado' });
+      return;
+    }
+
+    if (!evento.participantes.some(p => p.toString() === userId)) {
+      res.status(400).json({ message: 'No estás inscrito en este evento' });
+      return;
+    }
+
+    const updatedEvento = await eventoService.leaveEvento(id, userId);
+    
+    await Usuario.findByIdAndUpdate(userId, { $pull: { eventos: id } });
+
+    logger.info(`Usuario ${userId} salió del evento ${id}`);
+    res.status(200).json(updatedEvento);
+  } catch (error) {
+    logger.error(`Error al salir del evento: ${error}`);
+    res.status(500).json({ message: 'Error al salir del evento', error });
+  }
+};
+
+export const getMisEventos = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      res.status(401).json({ message: 'No autenticado' });
+      return;
+    }
+
+    const [eventosCreados, eventosInscritos] = await Promise.all([
+      Evento.find({ creador: userId })
+        .populate('participantes', 'username gmail')
+        .populate('creador', 'username gmail'),
+      Evento.find({ participantes: userId })
+        .populate('participantes', 'username gmail')
+        .populate('creador', 'username gmail')
+    ]);
+
+    res.status(200).json({
+      eventosCreados,
+      eventosInscritos
+    });
+  } catch (error) {
+    logger.error(`Error al obtener mis eventos: ${error}`);
+    res.status(500).json({ message: 'Error al obtener mis eventos', error });
   }
 };
 

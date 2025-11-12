@@ -5,6 +5,7 @@ import { validationResult } from 'express-validator';
 import Usuario from '../models/usuario';
 import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
+import {logger } from '../config/logger';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');
@@ -21,6 +22,61 @@ export async function createUser(req: Request, res: Response): Promise<Response>
     return res.status(201).json(user);
   } catch {
     return res.status(500).json({ error: 'FALLO AL CREAR EL USUARIO' });
+  }
+}
+
+export const deleteWithPassword = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body as { password?: string };
+
+    if (!password) {
+      return res.status(400).json({ message: 'Contraseña requerida.' });
+    }
+
+    const ok = await userService.verifyPasswordAndDelete(id, password);
+    if (!ok) {
+      return res.status(401).json({ message: 'Contraseña incorrecta.' });
+    }
+
+    return res.status(204).send();
+  } catch (err) {
+    console.error('[deleteWithPassword] Error:', err);
+    return res.status(500).json({ message: 'No se pudo eliminar la cuenta.' });
+  }
+};
+
+export async function checkUserExistsForReset(req: Request, res: Response) {
+  try {
+    const { emailOrUsername } = req.body || {};
+    if (!emailOrUsername || typeof emailOrUsername !== 'string') {
+      return res.status(400).json({ message: 'Falta email o usuario.' });
+    }
+
+    const user = await userService.findUserByEmailOrUsername(emailOrUsername); // { _id, username, gmail } | null
+    if (!user) return res.json({ exists: false });
+
+    return res.json({
+      exists: true,
+      userId: String(user._id),
+      username: user.username,
+      gmail: user.gmail,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ message: err?.message || 'Error al comprobar usuario.' });
+  }
+}
+
+export async function directResetPassword(req: Request, res: Response) {
+  try {
+    const { userId, newPassword } = req.body || {};
+    if (!userId || !newPassword) {
+      return res.status(400).json({ message: 'Faltan datos.' });
+    }
+    await userService.setPasswordByUserId(userId, newPassword);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(400).json({ message: err?.message || 'No se pudo actualizar la contraseña.' });
   }
 }
 
