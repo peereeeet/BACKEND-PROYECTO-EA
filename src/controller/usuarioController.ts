@@ -46,34 +46,37 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
   }
 };
 
-export async function forgotPassword(req: Request, res: Response){
-  try{
+export async function checkUserExistsForReset(req: Request, res: Response) {
+  try {
     const { emailOrUsername } = req.body || {};
-    if(!emailOrUsername || typeof emailOrUsername !== 'string'){
+    if (!emailOrUsername || typeof emailOrUsername !== 'string') {
       return res.status(400).json({ message: 'Falta email o usuario.' });
     }
 
-    const { devToken } = await userService.createPasswordResetToken(emailOrUsername);
+    const user = await userService.findUserByEmailOrUsername(emailOrUsername); // { _id, username, gmail } | null
+    if (!user) return res.json({ exists: false });
 
-    const payload:any = { message: 'Si el usuario existe, se ha enviado un email con instrucciones.' };
-    if(process.env.NODE_ENV !== 'production') payload.devToken = devToken;
-
-    return res.json(payload);
-  }catch(err:any){
-    return res.json({ message: 'Si el usuario existe, se ha enviado un email con instrucciones.' });
+    return res.json({
+      exists: true,
+      userId: String(user._id),
+      username: user.username,
+      gmail: user.gmail,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ message: err?.message || 'Error al comprobar usuario.' });
   }
 }
 
-export async function resetPassword(req: Request, res: Response){
-  try{
-    const { token, newPassword } = req.body || {};
-    if(!token || !newPassword){
+export async function directResetPassword(req: Request, res: Response) {
+  try {
+    const { userId, newPassword } = req.body || {};
+    if (!userId || !newPassword) {
       return res.status(400).json({ message: 'Faltan datos.' });
     }
-    await userService.resetPasswordWithToken(token, newPassword);
+    await userService.setPasswordByUserId(userId, newPassword);
     return res.json({ ok: true });
-  }catch(err:any){
-    return res.status(400).json({ message: err?.message || 'Token inválido o caducado.' });
+  } catch (err: any) {
+    return res.status(400).json({ message: err?.message || 'No se pudo actualizar la contraseña.' });
   }
 }
 

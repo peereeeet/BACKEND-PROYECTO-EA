@@ -7,8 +7,8 @@ import {
   updateUserById,
   deleteUserById,
   deleteWithPassword,
-  forgotPassword,
-  resetPassword,
+  checkUserExistsForReset,
+  directResetPassword,
   addEventToUser,
   updateOwnProfile,
   loginUser,           
@@ -180,9 +180,8 @@ router.delete('/:id',authenticateadminToken, deleteUserById);
 
 router.patch('/:id/delete-with-password', deleteWithPassword);
 
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
-
+router.post('/forgot-password/check', checkUserExistsForReset);
+router.post('/reset-password/direct', directResetPassword);
 
 /**
  * @swagger
