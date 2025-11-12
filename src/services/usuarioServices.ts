@@ -143,35 +143,18 @@ export class UserService {
     }
   }
 
-  async createPasswordResetToken(emailOrUsername: string) {
-    const user = await Usuario.findOne({
+  async findUserByEmailOrUsername(emailOrUsername: string) {
+    if (!emailOrUsername || typeof emailOrUsername !== 'string') return null;
+    return await Usuario.findOne({
       $or: [{ gmail: emailOrUsername }, { username: emailOrUsername }]
-    });
-    if (!user) return { devToken: undefined };
-
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    user.resetPasswordToken = sha256(rawToken);   
-    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); 
-
-    await user.save();
-    return { devToken: rawToken }; 
+    }).select('_id username gmail').lean();
   }
 
-  async resetPasswordWithToken(rawToken: string, newPassword: string) {
-    const hashed = sha256(rawToken);
-    const now = new Date();
-
-    const user = await Usuario.findOne({
-      resetPasswordToken: hashed,
-      resetPasswordExpires: { $gt: now }
-    });
-
-    if (!user) throw new Error('Token inválido o caducado.');
-
-    user.password = newPassword;
-    user.resetPasswordToken = null;
-    user.resetPasswordExpires = null;
-
+  async setPasswordByUserId(userId: string, newPassword: string) {
+    if (!userId || !newPassword) throw new Error('Faltan datos');
+    const user = await Usuario.findById(userId);
+    if (!user) throw new Error('Usuario no encontrado');
+    user.password = newPassword; // asume hash en pre-save del modelo
     await user.save();
   }
 
