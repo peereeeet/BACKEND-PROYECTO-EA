@@ -30,7 +30,7 @@ import {
   removeFriendBoth,
   postHeartbeat
 } from '../controller/usuarioController';
-import{ authenticateToken, authenticateadminToken, authenticateRefreshToken } from '../auth/middleware';
+import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
 import Usuario from '../models/usuario';
 
 const router = Router();
@@ -153,7 +153,7 @@ router.get('/:id', getUserById);
  */
 router.put('/:id', authenticateadminToken, updateUserById);
 
-router.put('/:id/self', authenticateToken, updateOwnProfile);
+router.put('/:id/self', authenticateOwner, updateOwnProfile);
 
 
 
@@ -178,7 +178,7 @@ router.put('/:id/self', authenticateToken, updateOwnProfile);
  */
 router.delete('/:id',authenticateadminToken, deleteUserById);
 
-router.patch('/:id/delete-with-password', deleteWithPassword);
+router.patch('/:id/delete-with-password',authenticateOwner, deleteWithPassword);
 
 router.post('/forgot-password/check', checkUserExistsForReset);
 router.post('/reset-password/direct', directResetPassword);
@@ -291,18 +291,18 @@ router.post('/check-email', checkEmailExists);
 router.post('/check-username', checkUsernameExists);
 
 router.post('/refresh', authenticateRefreshToken, refreshToken);
-router.put('/:id/rol', authenticateRefreshToken, updateUserRole);
+router.put('/:id/rol', authenticateadminToken, updateUserRole);
 
 router.post('/friend-request',authenticateToken, sendFriendRequest);
 router.post('/friend-accept',authenticateToken, acceptFriendRequest);
 router.post('/friend-reject',authenticateToken, rejectFriendRequest);
-router.get('/friend-requests/:userId',authenticateToken, getFriendRequests);
-router.delete('/:id/friends/:friendId',authenticateToken, removeFriendBoth);
-router.get('/:id/friends',authenticateToken, listFriends);
-router.get('/:id/requests/sent',authenticateToken, getSentRequests);
+router.get('/friend-requests/:id',authenticateOwner, getFriendRequests);
+router.delete('/:id/friends/:friendId',authenticateOwner, removeFriendBoth);
+router.get('/:id/friends',authenticateOwner, listFriends);
+router.get('/:id/requests/sent',authenticateOwner, getSentRequests);
 
-router.put('/:id/online', putOnline);
-router.put('/:id/offline', putOffline);
-router.post('/:id/heartbeat', postHeartbeat);
+router.put('/:id/online',authenticateOwner, putOnline);
+router.put('/:id/offline',authenticateOwner, putOffline);
+router.post('/:id/heartbeat',authenticateOwner, postHeartbeat);
 
 export default router;
