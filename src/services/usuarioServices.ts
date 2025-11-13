@@ -98,7 +98,6 @@ export class UserService {
     return updatedUser;
   }
 
-  /* Login */
   async loginUser(username: string, password: string): Promise<IUsuario | null> {
     try {
       const user = await Usuario.findOne({ username });
@@ -154,7 +153,7 @@ export class UserService {
     if (!userId || !newPassword) throw new Error('Faltan datos');
     const user = await Usuario.findById(userId);
     if (!user) throw new Error('Usuario no encontrado');
-    user.password = newPassword; // asume hash en pre-save del modelo
+    user.password = newPassword;
     await user.save();
   }
 

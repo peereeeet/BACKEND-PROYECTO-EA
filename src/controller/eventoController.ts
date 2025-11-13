@@ -17,7 +17,6 @@ function normalizeParticipantes(p: any): string[] {
   return [];
 }
 
-// Verificar si el usuario es admin o creador
 function canModifyEvento(userRol: string, userId: string, creadorId: string): boolean {
   return userRol === 'admin' || userId === creadorId.toString();
 }

@@ -8,7 +8,6 @@ import eventoRoutes from './routes/eventoRoutes';
 import { UserService } from './services/usuarioServices';  
 import valoracionRoutes from './routes/valoracionRoutes';
 
-
 const app = express();
 const PORT = 3000;
 const usuarioServices = new UserService();
@@ -18,8 +17,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.json() as express.RequestHandler); 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-
 
 //////////////////////AQUI CONECTAMOS A LA BASE DE DATOS//////////////////////
 mongoose.connect('mongodb://localhost:27017/BBDD')
