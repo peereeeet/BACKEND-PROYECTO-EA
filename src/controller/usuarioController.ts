@@ -53,7 +53,7 @@ export async function checkUserExistsForReset(req: Request, res: Response) {
       return res.status(400).json({ message: 'Falta email o usuario.' });
     }
 
-    const user = await userService.findUserByEmailOrUsername(emailOrUsername); // { _id, username, gmail } | null
+    const user = await userService.findUserByEmailOrUsername(emailOrUsername);
     if (!user) return res.json({ exists: false });
 
     return res.json({
@@ -104,7 +104,7 @@ export const updateUserRole = async (req: Request, res: Response): Promise<void>
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10)); // límite máximo de 50
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
     const skip = (page - 1) * limit;
 
     const [total, users] = await Promise.all([
@@ -258,14 +258,12 @@ export async function addEventToUser(req: Request, res: Response): Promise<Respo
     return res.status(400).json({ message: (error as Error).message });
   }
 }
-  /* Auxiliar function to eliminate the password of the user object */
 function removePassword(user: any) {
   const userObj = user.toObject();
   delete userObj.password;
   return userObj;
 }
 
-/* Login */
 export async function loginUser(req: Request, res: Response): Promise<Response> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -357,21 +355,16 @@ export const checkUsernameExists = async (req: Request, res: Response) => {
 
 export async function disableUser(req: Request, res: Response): Promise<Response> {
   try {
-    const { id } = req.params; // Obtenemos el ID de la URL
-
-    // Llamamos al servicio para que haga la lógica de negocio
+    const { id } = req.params;
     const updatedUser = await userService.disableUser(id);
 
-    // Si el servicio no encuentra el usuario, devolvemos un 404
     if (!updatedUser) {
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     }
 
-    // Si todo va bien, devolvemos el usuario actualizado
     return res.status(200).json(updatedUser);
 
   } catch (error) {
-    // Manejo de cualquier otro error
     return res.status(500).json({ message: (error as Error).message });
   }
 

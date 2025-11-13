@@ -18,7 +18,7 @@ export interface IUsuario {
   lastSeen?: Date; 
   comparePassword(candidatePassword: string): Promise<boolean>;
   isModified(path: string): boolean;
-  isActive: boolean; //Usuario habilitado/deshabilitado
+  isActive: boolean;
 }
 
 const usuarioSchema = new Schema<IUsuario>({

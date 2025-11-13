@@ -15,11 +15,9 @@ import { authenticateToken } from '../auth/middleware';
 
 const router = Router();
 
-// Rutas públicas (sin autenticación)
 router.get('/', getAllEventos);
 router.get('/:id', getEventoById);
 
-// Rutas protegidas (requieren autenticación)
 router.post('/', authenticateToken, createEvento); 
 router.post('/create-from-panel', authenticateToken, createEventoFromPanel);
 router.put('/:id', authenticateToken, updateEventoById);

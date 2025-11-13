@@ -3,7 +3,6 @@ import { ValoracionService } from '../services/valoracionServices';
 
 const service = new ValoracionService();
 
-// CREATE
 export async function createValoracion(req: Request, res: Response) {
   try {
     const { eventoId } = req.params;
@@ -25,8 +24,6 @@ export async function createValoracion(req: Request, res: Response) {
   }
 }
 
-
-// UPDATE
 export async function updateValoracion(req: Request, res: Response) {
   try {
     const { id } = req.params;
@@ -46,7 +43,6 @@ export async function updateValoracion(req: Request, res: Response) {
   }
 }
 
-// LIST by evento
 export async function listValoracionesEvento(req: Request, res: Response) {
   try {
     const { eventoId } = req.params;
@@ -63,7 +59,6 @@ export async function listValoracionesEvento(req: Request, res: Response) {
   }
 }
 
-// GET by id
 export async function getValoracionById(req: Request, res: Response) {
   try {
     const { id } = req.params;
@@ -75,7 +70,6 @@ export async function getValoracionById(req: Request, res: Response) {
   }
 }
 
-// DELETE
 export async function deleteValoracion(req: Request, res: Response) {
   try {
     const { id } = req.params;
