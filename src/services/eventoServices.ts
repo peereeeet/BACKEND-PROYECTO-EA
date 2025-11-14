@@ -3,7 +3,16 @@ import { Types } from 'mongoose';
 
 export class EventoService {
   async createEvento(data: Partial<IEvento>): Promise<IEvento> {
-    const e = new Evento(data);
+    const participantes = Array.from(
+      new Set((data.participantes || []).map((id: any) => id.toString()))
+    ).map((id) => new Types.ObjectId(id));
+
+    const payload: Partial<IEvento> = {
+      ...data,
+      participantes: participantes as any,
+    };
+
+    const e = new Evento(payload);
     return await e.save();
   }
   async createEventoWithCreator(input: {
@@ -13,9 +22,15 @@ export class EventoService {
     participantes?: string[];
     creador: string;
   }) {
-    const participantes = Array.from(
-      new Set((input.participantes || []).filter(Boolean))
-    ).map((id) => new Types.ObjectId(id));
+    // Aseguramos que el creador está incluido como participante
+    const uniqueIds = new Set<string>([
+      input.creador,
+      ...(input.participantes || []),
+    ].filter(Boolean));
+
+    const participantes = Array.from(uniqueIds).map(
+      (id) => new Types.ObjectId(id)
+    );
 
     const payload: any = {
       name: input.name.trim(),
@@ -36,6 +51,7 @@ export class EventoService {
       .populate('participantes', 'username gmail')
       .lean();
   }
+  
   async getAllEventos(): Promise<IEvento[]> {
     return await Evento.find();
   }

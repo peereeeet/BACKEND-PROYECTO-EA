@@ -23,7 +23,7 @@ function canModifyEvento(userRol: string, userId: string, creadorId: string): bo
 
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
-    const { name, schedule, address, participantes } = req.body;
+    const { name, schedule, address } = req.body;
     const creadorId = (req as any).user?.payload?.id; 
 
     if (!creadorId) {
@@ -31,19 +31,26 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
     }
 
     const scheduleStr = normalizeSchedule(schedule);
-    const participantesIds = normalizeParticipantes(participantes);
+    const participantesIdsRaw = normalizeParticipantes(req.body);
+
+    const allParticipantesIds = Array.from(
+      new Set([
+        ...participantesIdsRaw.map((id) => id.toString()),
+        creadorId.toString(),
+      ])
+    );
 
     const created = await eventoService.createEvento({
       name,
       schedule: scheduleStr,
       address,
-      participantes: participantesIds as any,
+      participantes: allParticipantesIds as any,
       creador: creadorId 
     });
 
-    if (participantesIds.length > 0) {
+    if (allParticipantesIds.length > 0) {
       await Usuario.updateMany(
-        { _id: { $in: participantesIds } },
+        { _id: { $in: allParticipantesIds } },
         { $addToSet: { eventos: created._id } }
       ).exec();
     }
