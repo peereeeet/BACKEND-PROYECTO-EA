@@ -23,7 +23,7 @@ function canModifyEvento(userRol: string, userId: string, creadorId: string): bo
 
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
-    const { name, schedule, address } = req.body;
+    const { name, schedule, address, lat, lng } = req.body;
     const creadorId = (req as any).user?.payload?.id; 
 
     if (!creadorId) {
@@ -40,10 +40,33 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       ])
     );
 
+    let latNum: number | undefined;
+    let lngNum: number | undefined;
+
+    if (lat !== undefined && lat !== null && lat !== '') {
+      const parsed = parseFloat(lat);
+      if (!Number.isNaN(parsed)) latNum = parsed;
+    }
+
+    if (lng !== undefined && lng !== null && lng !== '') {
+      const parsed = parseFloat(lng);
+      if (!Number.isNaN(parsed)) lngNum = parsed;
+    }
+
+    if (address && (latNum === undefined || lngNum === undefined)) {
+      const geo = await eventoService.geocodeAddress(address);
+      if (geo) {
+        if (latNum === undefined) latNum = geo.lat;
+        if (lngNum === undefined) lngNum = geo.lng;
+      }
+    }
+
     const created = await eventoService.createEvento({
       name,
       schedule: scheduleStr,
       address,
+      lat: latNum,
+      lng: lngNum,
       participantes: allParticipantesIds as any,
       creador: creadorId 
     });
@@ -68,7 +91,7 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
 
 export async function createEventoFromPanel(req: Request, res: Response) {
   try {
-    const { name, creador, address, schedule, participantes } = req.body || {};
+    const { name, creador, address, schedule, participantes, lat, lng } = req.body || {};
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ message: 'El nombre del evento es obligatorio.' });
@@ -77,10 +100,33 @@ export async function createEventoFromPanel(req: Request, res: Response) {
       return res.status(400).json({ message: 'Debes indicar el ID del creador del evento.' });
     }
 
+    let latNum: number | undefined;
+    let lngNum: number | undefined;
+
+    if (lat !== undefined && lat !== null && lat !== '') {
+      const parsed = parseFloat(lat);
+      if (!Number.isNaN(parsed)) latNum = parsed;
+    }
+
+    if (lng !== undefined && lng !== null && lng !== '') {
+      const parsed = parseFloat(lng);
+      if (!Number.isNaN(parsed)) lngNum = parsed;
+    }
+
+    if (address && (latNum === undefined || lngNum === undefined)) {
+      const geo = await eventoService.geocodeAddress(address);
+      if (geo) {
+        if (latNum === undefined) latNum = geo.lat;
+        if (lngNum === undefined) lngNum = geo.lng;
+      }
+    }
+
     const evento = await eventoService.createEventoWithCreator({
       name,
       creador,
       address,
+      lat: latNum,
+      lng: lngNum,
       schedule,
       participantes: Array.isArray(participantes) ? participantes : [],
     });
@@ -185,6 +231,17 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
         message: 'Solo el creador o un administrador pueden editar este evento' 
       });
       return;
+    }
+
+    const bodyUpdate: any = { ...req.body };
+
+    if (bodyUpdate.lat !== undefined && bodyUpdate.lat !== null && bodyUpdate.lat !== '') {
+      const parsed = parseFloat(bodyUpdate.lat);
+      bodyUpdate.lat = Number.isNaN(parsed) ? undefined : parsed;
+    }
+    if (bodyUpdate.lng !== undefined && bodyUpdate.lng !== null && bodyUpdate.lng !== '') {
+      const parsed = parseFloat(bodyUpdate.lng);
+      bodyUpdate.lng = Number.isNaN(parsed) ? undefined : parsed;
     }
 
     const updatedEvento = await Evento.findByIdAndUpdate(id, req.body, {

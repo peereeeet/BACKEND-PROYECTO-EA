@@ -1,5 +1,6 @@
 import { Evento, IEvento } from '../models/evento';
 import { Types } from 'mongoose';
+import axios from 'axios';
 
 export class EventoService {
   async createEvento(data: Partial<IEvento>): Promise<IEvento> {
@@ -12,17 +13,28 @@ export class EventoService {
       participantes: participantes as any,
     };
 
+    if (data.lat !== undefined) {
+      const latNum = typeof data.lat === 'string' ? parseFloat(data.lat) : data.lat;
+      if (!Number.isNaN(latNum as number)) payload.lat = latNum as number;
+    }
+
+    if (data.lng !== undefined) {
+      const lngNum = typeof data.lng === 'string' ? parseFloat(data.lng) : data.lng;
+      if (!Number.isNaN(lngNum as number)) payload.lng = lngNum as number;
+    }
+
     const e = new Evento(payload);
     return await e.save();
   }
   async createEventoWithCreator(input: {
     name: string;
     address?: string;
+    lat?: number | string;
+    lng?: number | string;
     schedule?: string | Date | null;
     participantes?: string[];
     creador: string;
   }) {
-    // Aseguramos que el creador está incluido como participante
     const uniqueIds = new Set<string>([
       input.creador,
       ...(input.participantes || []),
@@ -42,6 +54,16 @@ export class EventoService {
     if (input.schedule) {
       const d = new Date(input.schedule as any);
       payload.schedule = isNaN(d.getTime()) ? null : d;
+    }
+
+    if (input.lat !== undefined && input.lat !== null && input.lat !== '') {
+      const latNum = typeof input.lat === 'string' ? parseFloat(input.lat) : input.lat;
+      if (!Number.isNaN(latNum as number)) payload.lat = latNum;
+    }
+
+    if (input.lng !== undefined && input.lng !== null && input.lng !== '') {
+      const lngNum = typeof input.lng === 'string' ? parseFloat(input.lng) : input.lng;
+      if (!Number.isNaN(lngNum as number)) payload.lng = lngNum;
     }
 
     const created = await Evento.create(payload);
@@ -80,5 +102,45 @@ export class EventoService {
 
   async getEventosByCreador(creadorId: string): Promise<IEvento[]> {
     return await Evento.find({ creador: creadorId }).populate('creador', 'username gmail');
+  }
+
+  async geocodeAddress(
+    address: string
+  ): Promise<{ lat: number; lng: number } | null> {
+    try {
+      const resp = await axios.get(
+        'https://nominatim.openstreetmap.org/search',
+        {
+          params: {
+            q: address,
+            format: 'json',
+            limit: 1,
+          },
+          headers: {
+            'User-Agent': 'ea-proyecto-tfg/1.0 (perejs17@ejemplo.com)',
+          },
+        }
+      );
+
+      const data = resp.data;
+      if (!Array.isArray(data) || data.length === 0) {
+        console.warn('[EventoService] Geocoding sin resultados para:', address);
+        return null;
+      }
+
+      const first = data[0];
+      const lat = parseFloat(first.lat);
+      const lon = parseFloat(first.lon);
+
+      if (Number.isNaN(lat) || Number.isNaN(lon)) {
+        console.warn('[EventoService] Geocoding: lat/lon inválidos para:', address);
+        return null;
+      }
+
+      return { lat, lng: lon };
+    } catch (err) {
+      console.error('[EventoService] Error geocodificando dirección (Nominatim):', err);
+      return null;
+    }
   }
 }
