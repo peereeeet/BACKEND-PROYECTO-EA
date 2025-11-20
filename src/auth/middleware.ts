@@ -24,7 +24,7 @@ export function authenticateadminToken(req: Request, res: Response, next: NextFu
     return res.status(403).json({ error: "Se requieren privilegios de administrador" });
   }
 
-  logger.info(`Token verificado, usuario ${decoded}`);
+  logger.info(`Token verificado, usuario administrador`);
   next();
 }
 export function authenticateToken(req: Request, res: Response, next: NextFunction) {
@@ -40,7 +40,7 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
         return res.status(401).json({ error: "Token inválido o expirado" });
     }
 
-    logger.info(`Token verificado, usuario ${decoded}`);
+    logger.info(`Token verificado, usuario`);
     (req as any).user = decoded;
     next();
 }
@@ -65,7 +65,7 @@ export function authenticateOwner(req: Request, res: Response, next: NextFunctio
 
     // Solo permitir si es el propio usuario
     if (userIdFromToken === userIdFromParams) {
-        logger.info(`Token verificado, usuario ${decoded}`);
+        logger.info(`Token verificado`);
         (req as any).user = decoded;
         next();
     } else {
@@ -95,11 +95,11 @@ export function authenticateRefreshToken(req: Request, res: Response, next: Next
       return res.status(403).json({ error: "El userId no coincide con el del token" });
     }
 
-    logger.info(`token verificado, usuario ${decoded}`);
+    logger.info(`token verificado, usuario`);
     next();
     
   } catch (error) {
-    logger.error(`Error al verificar el refreshToken ${error}`);
+    logger.error(`Error al verificar el refreshToken`);
     return res.status(500).json({ error: "Error interno en la verificación del refresh token" });
   }
 }
