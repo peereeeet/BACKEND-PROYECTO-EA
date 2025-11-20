@@ -277,6 +277,7 @@ export class UserService {
   }
 
   async acceptFriendRequest(userId: string, requesterId: string) {
+    logger.info (userId);
     if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(requesterId)) {
       throw new Error('Invalid user id');
     }
@@ -330,6 +331,7 @@ export class UserService {
   async getFriendRequests(userId: string) {
     const user = await Usuario.findById(userId).populate('friendRequest', 'username gmail');
     if (!user) throw new Error('Usuario no encontrado');
+    logger.info("Enviando solicitudes de amistad");
     return user.friendRequest;
   };
 
