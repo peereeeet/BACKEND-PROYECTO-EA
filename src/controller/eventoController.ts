@@ -23,7 +23,7 @@ function canModifyEvento(userRol: string, userId: string, creadorId: string): bo
 
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
-    const { name, schedule, address } = req.body;
+    const { name, schedule, address, categoria } = req.body;
     const creadorId = (req as any).user?.payload?.id; 
 
     if (!creadorId) {
@@ -45,6 +45,7 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       name,
       schedule: scheduleStr,
       address,
+      categoria,
       participantes: allParticipantesIds as any,
       creador: creadorId 
     });
@@ -83,6 +84,7 @@ export async function createEventoFromPanel(req: Request, res: Response) {
 
     const evento = await eventoService.createEventoWithCreator({
       name,
+      categoria: req.body.categoria || 'Otros',
       creador,
       address,
       schedule,
@@ -111,7 +113,7 @@ export const getAllEventos = async (req: Request, res: Response): Promise<void> 
         .populate('participantes', 'username gmail')
         .populate('creador', 'username gmail')  
     ]);
-    logger.info(`Obteniendo eventos - Página: ${page}, Límite: ${limit}`);
+    logger.info(`Obteniendo eventos - Pagina: ${page}, Limite: ${limit}`);
     res.status(200).json({
       data: eventos,
       page,

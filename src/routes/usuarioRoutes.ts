@@ -3,6 +3,7 @@ import {
   createUser,
   getAllUsers,
   getUserById,
+  getUserByEmailOrUsername,
   getUserEvents,
   updateUserById,
   deleteUserById,
@@ -15,7 +16,6 @@ import {
   createAdminUser,
   checkEmailExists,
   checkUsernameExists,
-  getPlainPassword,
   disableUser,    
   refreshToken,   
   updateUserRole,
@@ -124,7 +124,7 @@ router.post('/', createUser);
  */
 router.get('/:id', getUserById);
 
-
+router.get('/search',authenticateToken, getUserByEmailOrUsername);
 
 /**
  * @swagger
@@ -285,7 +285,6 @@ router.post('/auth/create-admin', createAdminUser);
  */
 router.patch('/:id/disable',authenticateadminToken, disableUser);
 router.get('/:id/events', getUserEvents);
-router.get('/:id/plain-password', getPlainPassword);
 
 router.post('/check-email', checkEmailExists);
 router.post('/check-username', checkUsernameExists);

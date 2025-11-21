@@ -6,7 +6,6 @@ import Usuario from '../models/usuario';
 import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
 import {logger } from '../config/logger';
-import { error, log } from 'console';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');
@@ -52,7 +51,23 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
     return res.status(500).json({ message: 'No se pudo eliminar la cuenta.' });
   }
 };
-
+export async function getUserByEmailOrUsername(req: Request, res: Response) {
+  try {
+    const { emailOrUsername } = req.body;
+    if (!emailOrUsername || typeof emailOrUsername !== 'string') {
+      logger.warn('Falta email o usuario en findUserByEmailOrUsername');  
+      return res.status(400).json({ message: 'Falta email o usuario.' });
+    }
+    const user = await userService.findUserByEmailOrUsername(emailOrUsername);
+    if (!user) return res.json({ exists: false });
+    return res.json({
+      user: user,
+      exists: true
+    });
+  } catch (err: any) {
+    return res.status(500).json({ message: err?.message || 'Error al comprobar usuario.' });
+  }
+}
 export async function checkUserExistsForReset(req: Request, res: Response) {
   try {
     const { emailOrUsername } = req.body || {};

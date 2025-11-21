@@ -17,6 +17,7 @@ export class EventoService {
   }
   async createEventoWithCreator(input: {
     name: string;
+    categoria: string;
     address?: string;
     schedule?: string | Date | null;
     participantes?: string[];
@@ -34,6 +35,7 @@ export class EventoService {
 
     const payload: any = {
       name: input.name.trim(),
+      categoria: input.categoria,
       address: input.address || '',
       creador: new Types.ObjectId(input.creador),
       participantes,
