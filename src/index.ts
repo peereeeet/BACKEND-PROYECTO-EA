@@ -11,31 +11,44 @@ import { UserService } from './services/usuarioServices';
 import valoracionRoutes from './routes/valoracionRoutes';
 
 const app = express();
-const PORT = 3000;
-const usuarioServices = new UserService();
+const PORT = process.env.PORT || 3000;
 
-//////////////////////AQUI APLICAMOS LAS VARIABLES PARA EL MIDDLE WARE CORS//////////////////////
-app.use(cors());
+// ------------ CORS CONFIG ------------ //
+app.use(cors({
+  origin: [
+    'http://localhost:4200',     // dev
+    'http://localhost:8080',     // dev docker
+    'https://ea2.upc.edu',       // producción front
+    'https://ea2-api.upc.edu',   // producción backend
+  ],
+  credentials: true,
+}));
+
 app.use(express.json());
-app.use(express.json() as express.RequestHandler); 
+
+// ------------ SWAGGER ------------ //
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-//////////////////////AQUI CONECTAMOS A LA BASE DE DATOS//////////////////////
-mongoose.connect('mongodb://localhost:27017/BBDD')
-    .then(async () => {
-        console.log('CONEXION EXITOSA A LA BASE DE DATOS DE MONGODB'); 
-        
-        await usuarioServices.createAdminUser();
+// ------------ DATABASE ------------ //
+const mongoURL = process.env.MONGO_URL || "mongodb://mongo:27017/BBDD";
 
-        app.listen(PORT, () => {
-            console.log(`URL DEL SERVIDOR http://localhost:${PORT}`);
-            console.log(`Swagger docs en http://localhost:${PORT}/api-docs`);
-        });
-    })
-    .catch(err => {
-        console.error('HAY ALGUN ERROR CON LA CONEXION', err);
+mongoose.connect(mongoURL)
+  .then(async () => {
+    console.log('MongoDB conectado correctamente:', mongoURL);
+
+    const usuarioServices = new UserService();
+    await usuarioServices.createAdminUser();
+
+    app.listen(PORT, () => {
+      console.log(`Backend escuchando en http://localhost:${PORT}`);
+      console.log(`Swagger en http://localhost:${PORT}/api-docs`);
     });
+  })
+  .catch(err => {
+    console.error('Error al conectar a MongoDB:', err);
+  });
 
+// ------------ ROUTES ------------ //
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
 app.use('/api/ratings', valoracionRoutes);

@@ -10,11 +10,11 @@ const options: swaggerJSDoc.Options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000', 
+        url: 'https://ea2-api.upc.edu/api', 
       },
     ],
   },
-  apis: ['./src/routes/*.ts']
+  apis: ['./dist/routes/*.js']
 };
 
 const swaggerSpec = swaggerJSDoc(options);
