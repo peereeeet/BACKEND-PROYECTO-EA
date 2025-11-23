@@ -9,12 +9,14 @@ import {
   deleteEventoById,
   joinEvento,      
   leaveEvento,    
-  getMisEventos   
+  getMisEventos,
+  getEventosByBounds
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 
 const router = Router();
 
+router.get('/by-bounds', getEventosByBounds);
 router.get('/', getAllEventos);
 router.get('/:id', getEventoById);
 
