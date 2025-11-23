@@ -89,6 +89,39 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
   }
 }
 
+export const getEventosByBounds = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const north = parseFloat(req.query.north as string);
+    const south = parseFloat(req.query.south as string);
+    const east = parseFloat(req.query.east as string);
+    const west = parseFloat(req.query.west as string);
+
+    if (
+      [north, south, east, west].some((v) => Number.isNaN(v))
+    ) {
+      res.status(400).json({ message: 'Parámetros de mapa inválidos' });
+      return;
+    }
+
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
+
+    const result = await eventoService.getEventosWithinBounds(
+      north,
+      south,
+      east,
+      west,
+      page,
+      limit
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    logger.error(`Error al obtener eventos por área de mapa: ${error}`);
+    res.status(500).json({ message: 'Error al obtener eventos por área de mapa', error });
+  }
+};
+
 export async function createEventoFromPanel(req: Request, res: Response) {
   try {
     const { name, creador, address, schedule, participantes, lat, lng } = req.body || {};
