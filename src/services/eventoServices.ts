@@ -104,6 +104,38 @@ export class EventoService {
     return await Evento.find({ creador: creadorId }).populate('creador', 'username gmail');
   }
 
+  async getEventosWithinBounds(
+    north: number,
+    south: number,
+    east: number,
+    west: number,
+    page: number,
+    limit: number
+  ): Promise<{ data: IEvento[]; page: number; totalPages: number; totalItems: number }> {
+    const filter: any = {
+      lat: { $gte: south, $lte: north },
+      lng: { $gte: west, $lte: east }
+    };
+
+    const skip = (page - 1) * limit;
+
+    const [total, eventos] = await Promise.all([
+      Evento.countDocuments(filter),
+      Evento.find(filter)
+        .skip(skip)
+        .limit(limit)
+        .populate('participantes', 'username gmail')
+        .populate('creador', 'username gmail'),
+    ]);
+
+    return {
+      data: eventos as any,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      totalItems: total,
+    };
+  }
+
   async geocodeAddress(
     address: string
   ): Promise<{ lat: number; lng: number } | null> {
