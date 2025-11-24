@@ -338,27 +338,23 @@ export const checkEmailExists = async (req: Request, res: Response) => {
     const { gmail, userId } = req.body;
 
     if (!gmail) {
-      logger.warn("Falta gmail en checkEmailExists");
       return res.status(400).json({ exists: false, message: "El campo 'gmail' es obligatorio" });
     }
 
     const existingUser = await Usuario.findOne({ gmail });
 
     if (!existingUser) {
-      logger.info(`Correo disponible: ${gmail}`);
       return res.status(200).json({ exists: false, message: "El correo está disponible" });
     }
 
     if (userId && existingUser._id.toString() === userId) {
-      logger.info(`El correo pertenece al mismo usuario: ${gmail}`);
       return res.status(200).json({ exists: false, message: "El correo pertenece al mismo usuario" });
     }
-    logger.info(`El correo ya está registrado: ${gmail}`);
+
     return res.status(200).json({ exists: true, message: "El correo ya está registrado" });
 
   } catch (error) {
-    logger.error(`Error en checkEmailExists: ${error}`);
-    return res.status(500).json({ error: "Error al verificar el correo" });
+    res.status(500).json({ error: "Error al verificar el correo" });
   }
 };
 
