@@ -10,7 +10,7 @@ const options: swaggerJSDoc.Options = {
     },
     servers: [
       {
-        url: 'https://ea2-api.upc.edu/api', 
+        url: 'https://ea2-api.upc.edu', 
       },
     ],
   },
