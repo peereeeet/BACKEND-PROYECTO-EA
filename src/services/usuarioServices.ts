@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { ChatMessageModel, IChatMessage } from '../models/usuario';
 
 function sha256(v:string){ return crypto.createHash('sha256').update(v).digest('hex'); }
 
@@ -363,7 +364,7 @@ export class UserService {
     return { ok: true };
   }
 
-    async setUserOnline(userId: string) {
+  async setUserOnline(userId: string) {
     return await Usuario.findByIdAndUpdate(
       userId,
       { online: true, lastSeen: new Date() },
@@ -431,6 +432,23 @@ export class UserService {
 
     const me = await Usuario.findById(aId).lean();
     return me;
+  }
+
+  async getChatBetween(userId: string, friendId: string): Promise<IChatMessage[]> {
+    return ChatMessageModel.find({
+      $or: [
+        { from: userId, to: friendId },
+        { from: friendId, to: userId }
+      ]
+    })
+    .sort({ createdAt: 1 })
+    .exec();
+  }
+
+  async addChatMessage(from: string, to: string, text: string): Promise<IChatMessage> {
+    const msg = new ChatMessageModel({ from, to, text });
+    await msg.save();
+    return msg;
   }
 }
 
