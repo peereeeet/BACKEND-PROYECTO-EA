@@ -10,7 +10,8 @@ import {
   joinEvento,      
   leaveEvento,    
   getMisEventos,
-  getEventosByBounds
+  getEventosByBounds,
+  getEventosByName
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 
@@ -28,5 +29,6 @@ router.post('/check-name', checkEventNameExists);
 router.post('/:id/join', authenticateToken, joinEvento);
 router.post('/:id/leave', authenticateToken, leaveEvento);
 router.get('/user/my-events', authenticateToken, getMisEventos);
+router.get('/by-name/:name', getEventosByName);
 
 export default router;

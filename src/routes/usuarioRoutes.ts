@@ -3,6 +3,7 @@ import {
   createUser,
   getAllUsers,
   getUserById,
+  getUserByUsername,
   getUserEvents,
   updateUserById,
   deleteUserById,
@@ -42,7 +43,7 @@ const router = Router();
  *       type: object
  *       required:
  *         - username
- *         - email
+ *         - gmail
  *         - password
  *       properties:
  *         id:
@@ -50,7 +51,7 @@ const router = Router();
  *           description: ID generado por MongoDB
  *         username:
  *           type: string
- *         email:
+ *         gmail:
  *           type: string
  *         password:
  *           type: string
@@ -59,7 +60,7 @@ const router = Router();
  *           format: date
  *       example:
  *         username: "usuarioEjemplo"
- *         email: "usuario@ejemplo.com"
+ *         gmail: "usuario@ejemplo.com"
  *         password: "123456"
  *         birthday: "2000-01-01"
  */
@@ -283,6 +284,7 @@ router.post('/auth/create-admin', createAdminUser);
  *       description: Error del servidor
  */
 router.patch('/:id/disable',authenticateadminToken, disableUser);
+router.get('/by-username/:username', getUserByUsername);
 router.get('/:id/events', getUserEvents);
 
 router.post('/check-email', checkEmailExists);

@@ -175,4 +175,8 @@ export class EventoService {
       return null;
     }
   }
+  async getEventoByName(name: string): Promise<IEvento | null> {
+    return await Evento.findOne({ name: name });
+  }
+  
 }

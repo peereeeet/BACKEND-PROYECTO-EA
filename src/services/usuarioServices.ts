@@ -432,6 +432,10 @@ export class UserService {
     const me = await Usuario.findById(aId).lean();
     return me;
   }
+  async getUserByUsername(username: string): Promise<IUsuario | null> {
+    return await Usuario.findOne({ username });
+  }
+  
 }
 
 export default new UserService();

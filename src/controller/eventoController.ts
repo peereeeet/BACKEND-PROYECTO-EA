@@ -448,3 +448,20 @@ export const checkEventNameExists = async (req: Request, res: Response): Promise
     });
   }
 };
+export const getEventosByName = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { name } = req.params;
+      const evento = await eventoService.getEventoByName(name);
+      if (!evento) {
+        logger.warn(`Evento no encontrado con username: ${name}`);
+        res.status(404).json({ message: 'Usuario no encontrado' });
+        return;
+      }
+      logger.info(`Usuario obtenido con username: ${name}`);
+      res.status(200).json(evento);
+    }
+    catch (error) {
+      logger.error(`Error al obtener usuario por username: ${(error as Error).message}`);
+      res.status(500).json({ message: 'Error al obtener usuario', error });
+    }
+  };

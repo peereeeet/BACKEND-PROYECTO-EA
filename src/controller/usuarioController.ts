@@ -589,3 +589,19 @@ export const removeFriendBoth = async (req: Request, res: Response) => {
   }
 };
   
+export const getUserByUsername = async (req: Request, res: Response) => {
+  try {
+    const { username } = req.params;
+    const user = await userService.getUserByUsername(username);
+    if (!user) {
+      logger.warn(`Usuario no encontrado en getUserByUsername: ${username}`);
+      return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
+    }
+    logger.info(`Usuario obtenido por username: ${username}`);
+    return res.status(200).json(user);
+  }
+  catch (error) {
+    logger.error(`Error en getUserByUsername: ${error}`);
+    return res.status(500).json({ message: (error as Error).message });
+  }
+};
