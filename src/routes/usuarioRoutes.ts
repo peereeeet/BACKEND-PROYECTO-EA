@@ -27,6 +27,8 @@ import {
   removeFriendBoth,
   getChatBetween, 
   postChatMessage,
+  getEventChatForEvent,
+  postEventChatMessage,
   postHeartbeat
 } from '../controller/usuarioController';
 import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
@@ -298,8 +300,10 @@ router.delete('/:id/friends/:friendId',authenticateOwner, removeFriendBoth);
 router.get('/:id/friends',authenticateOwner, listFriends);
 router.get('/:id/requests/sent',authenticateOwner, getSentRequests);
 
-router.post('/:id/heartbeat',authenticateOwner, postHeartbeat);
+router.post('/:id/heartbeat', authenticateOwner, postHeartbeat);
 router.get('/:userId/chat/:friendId', getChatBetween);
 router.post('/:userId/chat/:friendId', postChatMessage);
+router.get('/events/:eventId/chat', getEventChatForEvent);
+router.post('/events/:eventId/chat', postEventChatMessage);
 
 export default router;

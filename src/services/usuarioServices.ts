@@ -5,7 +5,8 @@ import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { ChatMessageModel, IChatMessage } from '../models/usuario';
+import { ChatMessageModel, IChatMessage, EventChatMessageModel, IEventChatMessage } from '../models/usuario';
+import { io } from '../index';
 
 function sha256(v:string){ return crypto.createHash('sha256').update(v).digest('hex'); }
 
@@ -229,8 +230,8 @@ export class UserService {
     const toOid   = new Types.ObjectId(toId);
 
     const [from, to] = await Promise.all([
-      Usuario.findById(fromOid).select('_id friends sentRequests'),
-      Usuario.findById(toOid).select('_id friends friendRequest')
+      Usuario.findById(fromOid).select('_id username gmail friends sentRequests'),
+      Usuario.findById(toOid).select('_id username gmail friendRequest')
     ]);
     if (!from || !to) throw new Error('Usuario no encontrado');
 
@@ -267,6 +268,12 @@ export class UserService {
       Usuario.findById(toOid).select('_id friendRequest').lean(),
       Usuario.findById(fromOid).select('_id sentRequests').lean()
     ]);
+
+    io.to(`user:${toId}`).emit('friendRequest:received', {
+      fromUserId: from._id.toString(),
+      fromUsername: from.username,
+      fromGmail: from.gmail
+    });
 
     return {
       ok: true,
@@ -447,6 +454,21 @@ export class UserService {
 
   async addChatMessage(from: string, to: string, text: string): Promise<IChatMessage> {
     const msg = new ChatMessageModel({ from, to, text });
+    await msg.save();
+    return msg;
+  }
+
+  async getEventChat(eventId: string): Promise<IEventChatMessage[]> {
+    return EventChatMessageModel.find({ eventId }).sort({ createdAt: 1 }).exec();
+  }
+
+  async addEventChatMessage(
+    eventId: string,
+    userId: string,
+    username: string,
+    text: string
+  ): Promise<IEventChatMessage> {
+    const msg = new EventChatMessageModel({ eventId, userId, username, text });
     await msg.save();
     return msg;
   }

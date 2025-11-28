@@ -69,6 +69,23 @@ const chatMessageSchema = new Schema<IChatMessage>({
   createdAt: { type: Date, default: Date.now }
 });
 
+export interface IEventChatMessage extends Document {
+  eventId: string;
+  userId: string;
+  username: string;
+  text: string;
+  createdAt: Date;
+}
+
+const eventChatMessageSchema = new Schema<IEventChatMessage>({
+  eventId: { type: String, required: true, index: true },
+  userId: { type: String, required: true },
+  username: { type: String, required: true },
+  text: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
 export const Usuario = model<IUsuario>('Usuario', usuarioSchema);
 export default Usuario;
 export const ChatMessageModel = model<IChatMessage>('ChatMessage', chatMessageSchema);
+export const EventChatMessageModel = model<IEventChatMessage>('EventChatMessage', eventChatMessageSchema);
