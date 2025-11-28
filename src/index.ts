@@ -64,6 +64,7 @@ io.on('connection', (socket) => {
       if (!userId) return;
 
       (socket.data as any).userId = userId;
+      socket.join(`user:${userId}`);
 
       await usuarioServices.setUserOnline(userId);
 
@@ -115,6 +116,55 @@ io.on('connection', (socket) => {
       console.error('Error en chat:message:', err);
     }
   });
+
+  function getEventRoomId(eventId: string): string {
+    return `event:${eventId}`;
+  }
+
+  socket.on('eventChat:join', (payload: { eventId: string }) => {
+    try {
+      if (!payload?.eventId) return;
+      const roomId = getEventRoomId(payload.eventId);
+      socket.join(roomId);
+    } catch (err) {
+      console.error('Error en eventChat:join:', err);
+    }
+  });
+
+  socket.on(
+    'eventChat:message',
+    async (payload: {
+      eventId: string;
+      userId: string;
+      username: string;
+      text: string;
+    }) => {
+      try {
+        const { eventId, userId, username, text } = payload;
+        if (!eventId || !userId || !username || !text || !text.trim()) return;
+
+        const msg = await usuarioServices.addEventChatMessage(
+          eventId,
+          userId,
+          username,
+          text.trim()
+        );
+
+        const roomId = getEventRoomId(eventId);
+
+        io.to(roomId).emit('eventChat:message', {
+          _id: msg._id,
+          eventId: msg.eventId,
+          userId: msg.userId,
+          username: msg.username,
+          text: msg.text,
+          createdAt: msg.createdAt
+        });
+      } catch (err) {
+        console.error('Error en eventChat:message:', err);
+      }
+    }
+  );
 });
 
 export { io };

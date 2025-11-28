@@ -601,4 +601,44 @@ export const postChatMessage = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error al guardar mensaje' });
   }
 };
+
+export const getEventChatForEvent = async (req: Request, res: Response) => {
+  try {
+    const { eventId } = req.params;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'eventId es obligatorio' });
+    }
+
+    const messages = await userService.getEventChat(eventId);
+    return res.json(messages);
+  } catch (err) {
+    console.error('Error al obtener chat de evento:', err);
+    return res.status(500).json({ message: 'Error al obtener chat de evento' });
+  }
+};
+
+export const postEventChatMessage = async (req: Request, res: Response) => {
+  try {
+    const { eventId } = req.params;
+    const { userId, username, text } = req.body || {};
+
+    if (!eventId || !userId || !username || !text || !String(text).trim()) {
+      return res.status(400).json({ message: 'Datos incompletos' });
+    }
+
+    const msg = await userService.addEventChatMessage(
+      eventId,
+      String(userId),
+      String(username),
+      String(text).trim()
+    );
+    return res.status(201).json(msg);
+  } catch (err) {
+    console.error('Error al guardar mensaje de evento:', err);
+    return res
+      .status(500)
+      .json({ message: 'Error al guardar mensaje de evento' });
+  }
+};
   
