@@ -24,13 +24,14 @@ import {
   rejectFriendRequest,
   getFriendRequests, 
   listFriends,
-  putOnline, 
-  putOffline, 
   removeFriendBoth,
+  getChatBetween, 
+  postChatMessage,
+  getEventChatForEvent,
+  postEventChatMessage,
   postHeartbeat
 } from '../controller/usuarioController';
 import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
-import Usuario from '../models/usuario';
 
 const router = Router();
 
@@ -299,8 +300,10 @@ router.delete('/:id/friends/:friendId',authenticateOwner, removeFriendBoth);
 router.get('/:id/friends',authenticateOwner, listFriends);
 router.get('/:id/requests/sent',authenticateOwner, getSentRequests);
 
-router.put('/:id/online',authenticateOwner, putOnline);
-router.put('/:id/offline',authenticateOwner, putOffline);
-router.post('/:id/heartbeat',authenticateOwner, postHeartbeat);
+router.post('/:id/heartbeat', authenticateOwner, postHeartbeat);
+router.get('/:userId/chat/:friendId', getChatBetween);
+router.post('/:userId/chat/:friendId', postChatMessage);
+router.get('/events/:eventId/chat', getEventChatForEvent);
+router.post('/events/:eventId/chat', postEventChatMessage);
 
 export default router;
