@@ -56,31 +56,31 @@ usuarioSchema.methods.comparePassword = async function (candidatePassword: strin
 };
 
 export interface IChatMessage extends Document {
-  from: string;
-  to: string;
+  from: Types.ObjectId;
+  to: Types.ObjectId;
   text: string;
   createdAt: Date;
 }
 
 const chatMessageSchema = new Schema<IChatMessage>({
-  from: { type: String, required: true },
-  to:   { type: String, required: true },
+  from: { type: Schema.Types.ObjectId, required: true, ref: 'Usuario' },
+  to:   { type: Schema.Types.ObjectId, required: true, ref: 'Usuario' },
   text: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
 
 export interface IEventChatMessage extends Document {
-  eventId: string;
-  userId: string;
+  eventId: Types.ObjectId;
+  userId: Types.ObjectId;
   username: string;
   text: string;
   createdAt: Date;
 }
 
 const eventChatMessageSchema = new Schema<IEventChatMessage>({
-  eventId: { type: String, required: true, index: true },
-  userId: { type: String, required: true },
-  username: { type: String, required: true },
+  eventId: { type: Schema.Types.ObjectId, required: true, index: true, ref: 'Evento' },
+  userId: { type: Schema.Types.ObjectId, required: true, ref: 'Usuario' },
+  username: { type: String, required: true, ref: 'Usuario'},
   text: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
