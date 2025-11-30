@@ -15,7 +15,6 @@ import {
   createAdminUser,
   checkEmailExists,
   checkUsernameExists,
-  getPlainPassword,
   disableUser,    
   refreshToken,   
   updateUserRole,
@@ -285,7 +284,6 @@ router.post('/auth/create-admin', createAdminUser);
  */
 router.patch('/:id/disable',authenticateadminToken, disableUser);
 router.get('/:id/events', getUserEvents);
-router.get('/:id/plain-password', getPlainPassword);
 
 router.post('/check-email', checkEmailExists);
 router.post('/check-username', checkUsernameExists);
