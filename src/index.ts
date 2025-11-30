@@ -11,6 +11,7 @@ import { UserService } from './services/usuarioServices';
 import valoracionRoutes from './routes/valoracionRoutes';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import {logger } from './config/logger';
 
 const app = express();
 const PORT = 3000;
@@ -40,17 +41,17 @@ app.use('/api/ratings', valoracionRoutes);
 mongoose
   .connect('mongodb://localhost:27017/BBDD')
   .then(async () => {
-    console.log('CONEXION EXITOSA A LA BASE DE DATOS DE MONGODB');
+    logger.info('CONEXION EXITOSA A LA BASE DE DATOS DE MONGODB');
 
     await usuarioServices.createAdminUser();
 
     httpServer.listen(PORT, () => {
-      console.log(`URL DEL SERVIDOR http://localhost:${PORT}`);
-      console.log(`Swagger docs en http://localhost:${PORT}/api-docs`);
+      logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
+      logger.info(`Swagger docs en http://localhost:${PORT}/api-docs`);
     });
   })
   .catch((err) => {
-    console.error('HAY ALGUN ERROR CON LA CONEXION', err);
+    logger.error('HAY ALGUN ERROR CON LA CONEXION', err);
   });
 
 ////////////////////// SOCKET.IO: ONLINE / OFFLINE //////////////////////
@@ -58,20 +59,20 @@ function getChatRoomId(a: string, b: string): string {
   return [a, b].sort().join(':');
 }
 io.on('connection', (socket) => {
-  console.log('✅ Cliente conectado', socket.id);
+  logger.info(` Cliente conectado ${socket.id}`);
   socket.on('user:online', async (userId: string) => {
     try {
       if (!userId) return;
 
       (socket.data as any).userId = userId;
-      socket.join(`user:${userId}`);
+      socket.join(`user: ${userId}`);
 
       await usuarioServices.setUserOnline(userId);
 
       io.emit('user:online', { userId });
-      console.log(`🟢 Usuario online: ${userId}`);
+      logger.info(`Usuario online: ${userId}`);
     } catch (err) {
-      console.error('Error en user:online:', err);
+      logger.error(`Error en user:online: ${err}`);
     }
   });
 
@@ -82,9 +83,9 @@ io.on('connection', (socket) => {
 
       await usuarioServices.setUserOffline(userId);
       io.emit('user:offline', { userId });
-      console.log(`🔴 Usuario offline (disconnect): ${userId}`);
+      logger.info(`Usuario offline (disconnect): ${userId}`);
     } catch (err) {
-      console.error('Error al marcar offline en disconnect:', err);
+      logger.error(`Error al marcar offline en disconnect:, ${err}`);
     }
   });
 
@@ -94,7 +95,7 @@ io.on('connection', (socket) => {
       const roomId = getChatRoomId(payload.userId, payload.friendId);
       socket.join(roomId);
     } catch (err) {
-      console.error('Error en chat:join:', err);
+      logger.error(`Error en chat:join: ${err}`);
     }
   });
 
@@ -113,7 +114,7 @@ io.on('connection', (socket) => {
         createdAt: msg.createdAt
       });
     } catch (err) {
-      console.error('Error en chat:message:', err);
+      logger.error(`Error en chat:message: ${err}`);
     }
   });
 
@@ -127,7 +128,7 @@ io.on('connection', (socket) => {
       const roomId = getEventRoomId(payload.eventId);
       socket.join(roomId);
     } catch (err) {
-      console.error('Error en eventChat:join:', err);
+      logger.error(`Error en eventChat:join: ${err}`);
     }
   });
 
@@ -161,7 +162,7 @@ io.on('connection', (socket) => {
           createdAt: msg.createdAt
         });
       } catch (err) {
-        console.error('Error en eventChat:message:', err);
+        logger.error(`Error en eventChat:message: ${err}`);
       }
     }
   );
