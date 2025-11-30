@@ -10,6 +10,7 @@ import valoracionRoutes from './routes/valoracionRoutes';
 import { UserService } from './services/usuarioServices';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import { logger } from './config/logger';
 
 // ----------- APP & SERVER ----------- //
 dotenv.config();
@@ -43,17 +44,17 @@ const httpServer = createServer(app);
 mongoose
   .connect(mongoURL)
   .then(async () => {
-    console.log('MongoDB conectado correctamente:', mongoURL);
+    logger.info({ url: mongoURL }, 'MongoDB conectado correctamente');
 
     await usuarioServices.createAdminUser();
 
     httpServer.listen(PORT, () => {
-      console.log(`Backend escuchando en http://localhost:${PORT}`);
-      console.log(`Swagger en http://localhost:${PORT}/api-docs`);
+      logger.info(`Backend escuchando en http://localhost:${PORT}`);
+      logger.info(`Swagger en http://localhost:${PORT}/api-docs`);
     });
   })
   .catch((err) => {
-    console.error('Error al conectar a MongoDB:', err);
+    logger.error({ error: err }, 'Error al conectar a MongoDB');
   });
 
 // ----------- ROUTES ----------- //
@@ -83,7 +84,7 @@ function getEventRoomId(eventId: string): string {
 
 // Handlers de WebSockets
 io.on('connection', (socket) => {
-  console.log('🔌 Cliente conectado:', socket.id);
+  logger.info({ socketId: socket.id }, '🔌 Cliente conectado');
 
   socket.on('user:online', async (userId: string) => {
     try {
@@ -95,9 +96,9 @@ io.on('connection', (socket) => {
       await usuarioServices.setUserOnline(userId);
 
       io.emit('user:online', { userId });
-      console.log(`🟢 Usuario online: ${userId}`);
+      logger.info({ userId }, '🟢 Usuario online');
     } catch (err) {
-      console.error('Error en user:online:', err);
+      logger.error({ error: err }, 'Error en user:online');
     }
   });
 
@@ -108,9 +109,9 @@ io.on('connection', (socket) => {
 
       await usuarioServices.setUserOffline(userId);
       io.emit('user:offline', { userId });
-      console.log(`🔴 Usuario offline: ${userId}`);
+      logger.info({ userId }, '🔴 Usuario offline');
     } catch (err) {
-      console.error('Error al desconectar usuario:', err);
+      logger.error({ error: err }, 'Error al desconectar usuario');
     }
   });
 
@@ -119,7 +120,7 @@ io.on('connection', (socket) => {
       if (!userId || !friendId) return;
       socket.join(getChatRoomId(userId, friendId));
     } catch (err) {
-      console.error('Error en chat:join:', err);
+      logger.error({ error: err }, 'Error en chat:join');
     }
   });
 
@@ -132,7 +133,7 @@ io.on('connection', (socket) => {
 
       io.to(roomId).emit('chat:message', msg);
     } catch (err) {
-      console.error('Error en chat:message:', err);
+      logger.error({ error: err }, 'Error en chat:message');
     }
   });
 
@@ -151,7 +152,7 @@ io.on('connection', (socket) => {
 
       io.to(getEventRoomId(eventId)).emit('eventChat:message', msg);
     } catch (err) {
-      console.error('Error en eventChat:message:', err);
+      logger.error({ error: err }, 'Error en eventChat:message');
     }
   });
 });

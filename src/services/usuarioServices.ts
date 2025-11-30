@@ -135,12 +135,12 @@ export class UserService {
           rol: 'admin'
         });
         await adminUser.save();
-        console.log('Usuario admin creado exitosamente');
+        logger.info('Usuario admin creado exitosamente');
       } else {
-        console.log('Usuario admin ya existe');
+        logger.info('Usuario admin ya existe');
       }
     } catch (error) {
-      console.error('Error creando usuario admin:', error);
+      logger.error({ error }, 'Error creando usuario admin');
     }
   }
 
