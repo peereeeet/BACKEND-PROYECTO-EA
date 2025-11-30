@@ -178,37 +178,19 @@ export async function createEventoFromPanel(req: Request, res: Response) {
 
 export const getAllEventos = async (req: Request, res: Response): Promise<void> => {
   try {
-    // 1. OBTENER FILTRO DE CREADOR
-    const creatorId = req.query.creatorId as string | undefined;
-
-    // 2. CONSTRUIR OBJETO DE CONSULTA (query)
-    const query: any = {};
-    if (creatorId) {
-      // Si se proporciona creatorId, solo busca eventos creados por ese ID
-      query.creador = creatorId;
-      logger.info(`Filtro activo: Solo eventos creados por ${creatorId}`);
-    } else {
-      logger.info('Filtro inactivo: Todos los eventos');
-    }
-
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
     const skip = (page - 1) * limit;
 
     const [total, eventos] = await Promise.all([
-      // Cuenta solo los documentos que coincidan con la consulta (query)
-      Evento.countDocuments(query), 
-      
-      // Busca solo los documentos que coincidan con la consulta (query)
-      Evento.find(query) 
+      Evento.countDocuments(),
+      Evento.find()
         .skip(skip)
         .limit(limit)
         .populate('participantes', 'username gmail')
         .populate('creador', 'username gmail')  
     ]);
-    
-    logger.info(`Obteniendo eventos (filtrados) - Total devuelto: ${eventos.length}`);
-    
+    logger.info(`Obteniendo eventos - Página: ${page}, Límite: ${limit}`);
     res.status(200).json({
       data: eventos,
       page,

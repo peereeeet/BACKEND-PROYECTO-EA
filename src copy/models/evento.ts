@@ -1,0 +1,29 @@
+import { Schema, model, Types } from 'mongoose';
+
+export interface IEvento {
+  _id: Types.ObjectId;
+  name: string;
+  schedule: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  participantes: Types.ObjectId[];
+  creador: Types.ObjectId;
+  avgRating?: number;
+  ratingsCount?: number;
+}
+
+const eventoSchema = new Schema<IEvento>({
+  name: { type: String, required: true },
+  schedule: { type: String, required: true },
+  address: { type: String },
+  lat: { type: Number },
+  lng: { type: Number },
+  participantes: [{ type: Schema.Types.ObjectId, ref: 'Usuario', default: [] }],
+  creador: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true }, 
+  avgRating: { type: Number, default: 0 },
+  ratingsCount: { type: Number, default: 0 }
+}, { timestamps: false, versionKey: false });
+
+export const Evento = model<IEvento>('Evento', eventoSchema);
+export default Evento;
