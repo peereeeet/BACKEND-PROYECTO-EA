@@ -1,6 +1,7 @@
 import { Evento, IEvento } from '../models/evento';
 import { Types } from 'mongoose';
 import axios from 'axios';
+import { logger } from '../config/logger';
 
 export class EventoService {
   async createEvento(data: Partial<IEvento>): Promise<IEvento> {
@@ -156,7 +157,7 @@ export class EventoService {
 
       const data = resp.data;
       if (!Array.isArray(data) || data.length === 0) {
-        console.warn('[EventoService] Geocoding sin resultados para:', address);
+        logger.warn({ address }, '[EventoService] Geocoding sin resultados');
         return null;
       }
 
@@ -165,13 +166,13 @@ export class EventoService {
       const lon = parseFloat(first.lon);
 
       if (Number.isNaN(lat) || Number.isNaN(lon)) {
-        console.warn('[EventoService] Geocoding: lat/lon inválidos para:', address);
+        logger.warn({ address }, '[EventoService] Geocoding: lat/lon inválidos');
         return null;
       }
 
       return { lat, lng: lon };
     } catch (err) {
-      console.error('[EventoService] Error geocodificando dirección (Nominatim):', err);
+      logger.error({ error: err }, '[EventoService] Error geocodificando dirección (Nominatim)');
       return null;
     }
   }
