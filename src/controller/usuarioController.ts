@@ -6,10 +6,12 @@ import Usuario from '../models/usuario';
 import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
 import {logger } from '../config/logger';
-
+import { OAuth2Client } from 'google-auth-library';
+import crypto from 'crypto';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export async function createUser(req: Request, res: Response): Promise<Response> {
   const errors = validationResult(req);
@@ -318,6 +320,79 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
   } catch (error) {
     logger.error(`Error en loginUser: ${error}`);
     return res.status(500).json({ error: 'ERROR EN EL LOGIN' });
+  }
+}
+
+export async function loginWithGoogle(req: Request, res: Response): Promise<Response> {
+  try {
+    const { credential } = req.body || {};
+
+    if (!credential) {
+      logger.warn('Falta credential de Google en la petición');
+      return res.status(400).json({ message: 'Falta credential de Google' });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload) {
+      logger.warn('Payload vacío en token de Google');
+      return res.status(401).json({ message: 'Token de Google no válido' });
+    }
+
+    const gmail = payload.email;
+    const name =
+      payload.name ||
+      payload.given_name ||
+      (gmail ? gmail.split('@')[0] : 'usuario_google');
+
+    if (!gmail) {
+      logger.warn('Google no devolvió email');
+      return res.status(400).json({ message: 'Google no devolvió email' });
+    }
+
+    let user = await Usuario.findOne({ gmail });
+
+    if (!user) {
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      user = new Usuario({
+        username: name,
+        gmail,
+        password: '1234567',
+        birthday: new Date('2000-01-01'),
+        rol: 'usuario',
+      });
+
+      await user.save();
+      logger.info(`Usuario creado via Google: ${gmail}`);
+    }
+
+    if (!user.isActive) {
+      logger.warn(`Usuario ${gmail} intentó loguearse pero está deshabilitado`);
+      return res.status(403).json({ message: 'Cuenta deshabilitada' });
+    }
+
+    const token = await generateToken(user, res);
+    const refreshToken = await generateRefreshToken(user, res);
+
+    logger.info(`Login con Google exitoso para ${gmail}`);
+
+    return res.status(200).json({
+      message: 'LOGIN GOOGLE EXITOSO',
+      user: removePassword(user),
+      token,
+      refreshToken,
+    });
+  } catch (error: any) {
+    logger.error(
+      `Error en loginWithGoogle: ${
+        error instanceof Error ? error.message : JSON.stringify(error)
+      }`
+    );
+    return res.status(500).json({ error: 'ERROR EN LOGIN CON GOOGLE' });
   }
 }
 

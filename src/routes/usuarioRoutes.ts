@@ -29,7 +29,8 @@ import {
   postChatMessage,
   getEventChatForEvent,
   postEventChatMessage,
-  postHeartbeat
+  postHeartbeat,
+  loginWithGoogle 
 } from '../controller/usuarioController';
 import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
 
@@ -391,6 +392,8 @@ router.put('/:id/addEvent', authenticateadminToken, addEventToUser);
  *         description: Credenciales incorrectas
  */
 router.post('/auth/login', loginUser);
+
+router.post('/auth/google', loginWithGoogle);
 
 /**
  * @swagger
