@@ -10,11 +10,7 @@ import valoracionRoutes from './routes/valoracionRoutes';
 import { UserService } from './services/usuarioServices';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-<<<<<<< HEAD
 import { logger } from './config/logger';
-=======
-import {logger } from './config/logger';
->>>>>>> develop
 
 // ----------- APP & SERVER ----------- //
 dotenv.config();
@@ -78,9 +74,6 @@ const io = new SocketIOServer(httpServer, {
   }
 });
 
-<<<<<<< HEAD
-// Utilidades
-=======
 ////////////////////// MIDDLEWARE CORS + JSON //////////////////////
 app.use(cors());
 app.use(express.json());
@@ -110,7 +103,6 @@ mongoose
   });
 
 ////////////////////// SOCKET.IO: ONLINE / OFFLINE //////////////////////
->>>>>>> develop
 function getChatRoomId(a: string, b: string): string {
   return [a, b].sort().join(':');
 }
@@ -120,12 +112,7 @@ function getEventRoomId(eventId: string): string {
 
 // Handlers de WebSockets
 io.on('connection', (socket) => {
-<<<<<<< HEAD
-  logger.info({ socketId: socket.id }, '🔌 Cliente conectado');
-
-=======
   logger.info(` Cliente conectado ${socket.id}`);
->>>>>>> develop
   socket.on('user:online', async (userId: string) => {
     try {
       if (!userId) return;
@@ -136,15 +123,9 @@ io.on('connection', (socket) => {
       await usuarioServices.setUserOnline(userId);
 
       io.emit('user:online', { userId });
-<<<<<<< HEAD
-      logger.info({ userId }, '🟢 Usuario online');
-    } catch (err) {
-      logger.error({ error: err }, 'Error en user:online');
-=======
       logger.info(`Usuario online: ${userId}`);
     } catch (err) {
       logger.error(`Error en user:online: ${err}`);
->>>>>>> develop
     }
   });
 
@@ -155,15 +136,9 @@ io.on('connection', (socket) => {
 
       await usuarioServices.setUserOffline(userId);
       io.emit('user:offline', { userId });
-<<<<<<< HEAD
       logger.info({ userId }, '🔴 Usuario offline');
     } catch (err) {
       logger.error({ error: err }, 'Error al desconectar usuario');
-=======
-      logger.info(`Usuario offline (disconnect): ${userId}`);
-    } catch (err) {
-      logger.error(`Error al marcar offline en disconnect:, ${err}`);
->>>>>>> develop
     }
   });
 
@@ -172,11 +147,7 @@ io.on('connection', (socket) => {
       if (!userId || !friendId) return;
       socket.join(getChatRoomId(userId, friendId));
     } catch (err) {
-<<<<<<< HEAD
-      logger.error({ error: err }, 'Error en chat:join');
-=======
       logger.error(`Error en chat:join: ${err}`);
->>>>>>> develop
     }
   });
 
@@ -189,11 +160,7 @@ io.on('connection', (socket) => {
 
       io.to(roomId).emit('chat:message', msg);
     } catch (err) {
-<<<<<<< HEAD
-      logger.error({ error: err }, 'Error en chat:message');
-=======
       logger.error(`Error en chat:message: ${err}`);
->>>>>>> develop
     }
   });
 
@@ -212,11 +179,6 @@ io.on('connection', (socket) => {
 
       io.to(getEventRoomId(eventId)).emit('eventChat:message', msg);
     } catch (err) {
-<<<<<<< HEAD
-      logger.error({ error: err }, 'Error en eventChat:message');
-    }
-  });
-=======
       logger.error(`Error en eventChat:join: ${err}`);
     }
   });
@@ -255,7 +217,6 @@ io.on('connection', (socket) => {
       }
     }
   );
->>>>>>> develop
 });
 
 export { io };
