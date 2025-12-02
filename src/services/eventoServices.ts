@@ -157,7 +157,11 @@ export class EventoService {
 
       const data = resp.data;
       if (!Array.isArray(data) || data.length === 0) {
+<<<<<<< HEAD
         logger.warn({ address }, '[EventoService] Geocoding sin resultados');
+=======
+        logger.warn(`[EventoService] Geocoding sin resultados para:, ${address}`);
+>>>>>>> develop
         return null;
       }
 
@@ -166,13 +170,21 @@ export class EventoService {
       const lon = parseFloat(first.lon);
 
       if (Number.isNaN(lat) || Number.isNaN(lon)) {
+<<<<<<< HEAD
         logger.warn({ address }, '[EventoService] Geocoding: lat/lon inválidos');
+=======
+        logger.warn(`[EventoService] Geocoding: lat/lon inválidos para: ${address}`);
+>>>>>>> develop
         return null;
       }
 
       return { lat, lng: lon };
     } catch (err) {
+<<<<<<< HEAD
       logger.error({ error: err }, '[EventoService] Error geocodificando dirección (Nominatim)');
+=======
+      logger.error(`[EventoService] Error geocodificando dirección (Nominatim): ${err}`);
+>>>>>>> develop
       return null;
     }
   }

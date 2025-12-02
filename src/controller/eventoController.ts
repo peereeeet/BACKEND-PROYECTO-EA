@@ -171,7 +171,10 @@ export async function createEventoFromPanel(req: Request, res: Response) {
     return res.status(201).json(evento);
   } catch (err: any) {
     logger.error(`Error al crear evento desde panel: ${err?.message || err}`);
+<<<<<<< HEAD
     logger.error({ error: err }, 'Error en createEventoFromPanel');
+=======
+>>>>>>> develop
     return res.status(500).json({ message: err?.message || 'No se pudo crear el evento (panel).' });
   }
 }

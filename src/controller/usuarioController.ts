@@ -6,10 +6,12 @@ import Usuario from '../models/usuario';
 import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
 import {logger } from '../config/logger';
-import { error, log } from 'console';
+import { OAuth2Client } from 'google-auth-library';
+import crypto from 'crypto';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export async function createUser(req: Request, res: Response): Promise<Response> {
   const errors = validationResult(req);
@@ -48,7 +50,10 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
     return res.status(204).send();
   } catch (err) {
     logger.error(`deleteWithPassword error al eliminar usuario:${err}`);
+<<<<<<< HEAD
     logger.error({ error: err }, '[deleteWithPassword] Error');
+=======
+>>>>>>> develop
     return res.status(500).json({ message: 'No se pudo eliminar la cuenta.' });
   }
 };
@@ -182,7 +187,10 @@ export const getUserEvents = async (req: Request, res: Response) => {
     return res.json({ ok: true, data: events || [] });
   } catch (err) {
     logger.error(`getUserEvents error: ${err}`);
+<<<<<<< HEAD
     logger.error({ error: err }, 'getUserEvents error');
+=======
+>>>>>>> develop
     return res.status(500).json({ ok: false, message: 'No se pudieron listar los eventos' });
   }
 };
@@ -323,6 +331,79 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
   }
 }
 
+export async function loginWithGoogle(req: Request, res: Response): Promise<Response> {
+  try {
+    const { credential } = req.body || {};
+
+    if (!credential) {
+      logger.warn('Falta credential de Google en la petición');
+      return res.status(400).json({ message: 'Falta credential de Google' });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload) {
+      logger.warn('Payload vacío en token de Google');
+      return res.status(401).json({ message: 'Token de Google no válido' });
+    }
+
+    const gmail = payload.email;
+    const name =
+      payload.name ||
+      payload.given_name ||
+      (gmail ? gmail.split('@')[0] : 'usuario_google');
+
+    if (!gmail) {
+      logger.warn('Google no devolvió email');
+      return res.status(400).json({ message: 'Google no devolvió email' });
+    }
+
+    let user = await Usuario.findOne({ gmail });
+
+    if (!user) {
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      user = new Usuario({
+        username: name,
+        gmail,
+        password: '1234567',
+        birthday: new Date('2000-01-01'),
+        rol: 'usuario',
+      });
+
+      await user.save();
+      logger.info(`Usuario creado via Google: ${gmail}`);
+    }
+
+    if (!user.isActive) {
+      logger.warn(`Usuario ${gmail} intentó loguearse pero está deshabilitado`);
+      return res.status(403).json({ message: 'Cuenta deshabilitada' });
+    }
+
+    const token = await generateToken(user, res);
+    const refreshToken = await generateRefreshToken(user, res);
+
+    logger.info(`Login con Google exitoso para ${gmail}`);
+
+    return res.status(200).json({
+      message: 'LOGIN GOOGLE EXITOSO',
+      user: removePassword(user),
+      token,
+      refreshToken,
+    });
+  } catch (error: any) {
+    logger.error(
+      `Error en loginWithGoogle: ${
+        error instanceof Error ? error.message : JSON.stringify(error)
+      }`
+    );
+    return res.status(500).json({ error: 'ERROR EN LOGIN CON GOOGLE' });
+  }
+}
+
 /* Create admin only development */
 export async function createAdminUser(req: Request, res: Response): Promise<Response> {
   try {
@@ -413,11 +494,17 @@ export async function refreshToken(req: Request, res: Response): Promise<Respons
       logger.warn(`Usuario no encontrado en refreshToken con ID: ${id}`);
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     }
+<<<<<<< HEAD
     logger.info({ user: user._id }, 'Usuario para refresh token');
 
     const newToken = await generateToken(user, res);
     logger.info(`Nuevo token generado para el usuario con ID: ${id}`);
     logger.info({ token: newToken }, 'Nuevo token generado');
+=======
+
+    const newToken = await generateToken(user, res);
+    logger.info(`Nuevo token generado para el usuario con ID: ${id}`);
+>>>>>>> develop
     return res.status(200).json({
       token: newToken
     });
@@ -563,7 +650,10 @@ export const removeFriendBoth = async (req: Request, res: Response) => {
       logger.error(`IDs invalidos en removeFriendBoth: ${msg}`);
       return res.status(400).json({ ok: false, message: 'ID no valido', detail: msg });
     }
+<<<<<<< HEAD
     logger.error({ error: e }, 'removeFriendBoth error');
+=======
+>>>>>>> develop
     logger.error(`Error en removeFriendBoth: ${msg}`);
     return res.status(500).json({ ok: false, message: 'No se pudo eliminar la amistad' });
   }
@@ -580,7 +670,10 @@ export const getChatBetween = async (req: Request, res: Response) => {
     const messages = await userService.getChatBetween(userId, friendId);
     res.json(messages);
   } catch (err) {
+<<<<<<< HEAD
     logger.error({ error: err }, 'Error al obtener chat');
+=======
+>>>>>>> develop
     res.status(500).json({ message: 'Error al obtener chat' });
   }
 };
@@ -597,7 +690,10 @@ export const postChatMessage = async (req: Request, res: Response) => {
     const msg = await userService.addChatMessage(userId, friendId, text.trim());
     res.status(201).json(msg);
   } catch (err) {
+<<<<<<< HEAD
     logger.error({ error: err }, 'Error al guardar mensaje');
+=======
+>>>>>>> develop
     res.status(500).json({ message: 'Error al guardar mensaje' });
   }
 };
@@ -613,7 +709,10 @@ export const getEventChatForEvent = async (req: Request, res: Response) => {
     const messages = await userService.getEventChat(eventId);
     return res.json(messages);
   } catch (err) {
+<<<<<<< HEAD
     logger.error({ error: err }, 'Error al obtener chat de evento');
+=======
+>>>>>>> develop
     return res.status(500).json({ message: 'Error al obtener chat de evento' });
   }
 };
@@ -635,7 +734,10 @@ export const postEventChatMessage = async (req: Request, res: Response) => {
     );
     return res.status(201).json(msg);
   } catch (err) {
+<<<<<<< HEAD
     logger.error({ error: err }, 'Error al guardar mensaje de evento');
+=======
+>>>>>>> develop
     return res
       .status(500)
       .json({ message: 'Error al guardar mensaje de evento' });
