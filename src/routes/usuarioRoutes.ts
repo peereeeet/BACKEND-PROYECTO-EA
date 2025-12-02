@@ -15,10 +15,6 @@ import {
   createAdminUser,
   checkEmailExists,
   checkUsernameExists,
-<<<<<<< HEAD
-  //getPlainPassword,
-=======
->>>>>>> origin/develop
   disableUser,    
   refreshToken,   
   updateUserRole,
@@ -430,11 +426,6 @@ router.post('/auth/create-admin', createAdminUser);
  *       description: Error del servidor
  */
 router.patch('/:id/disable',authenticateadminToken, disableUser);
-<<<<<<< HEAD
-router.get('/:id/events', getUserEvents);
-//router.get('/:id/plain-password', getPlainPassword);
-=======
->>>>>>> origin/develop
 
 /**
  * @swagger

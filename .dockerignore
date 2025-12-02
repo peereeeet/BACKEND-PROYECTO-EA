@@ -4,3 +4,4 @@ dist
 Dockerfile
 Dockerfile.dev
 npm-debug.log
+.env
