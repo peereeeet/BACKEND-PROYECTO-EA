@@ -140,11 +140,7 @@ export class UserService {
         logger.info('Usuario admin ya existe');
       }
     } catch (error) {
-<<<<<<< HEAD
       logger.error({ error }, 'Error creando usuario admin');
-=======
-      logger.error(`Error creando usuario admin: ${error}`);
->>>>>>> develop
     }
   }
 

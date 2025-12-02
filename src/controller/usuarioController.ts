@@ -50,10 +50,6 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
     return res.status(204).send();
   } catch (err) {
     logger.error(`deleteWithPassword error al eliminar usuario:${err}`);
-<<<<<<< HEAD
-    logger.error({ error: err }, '[deleteWithPassword] Error');
-=======
->>>>>>> develop
     return res.status(500).json({ message: 'No se pudo eliminar la cuenta.' });
   }
 };
@@ -187,10 +183,6 @@ export const getUserEvents = async (req: Request, res: Response) => {
     return res.json({ ok: true, data: events || [] });
   } catch (err) {
     logger.error(`getUserEvents error: ${err}`);
-<<<<<<< HEAD
-    logger.error({ error: err }, 'getUserEvents error');
-=======
->>>>>>> develop
     return res.status(500).json({ ok: false, message: 'No se pudieron listar los eventos' });
   }
 };
@@ -494,17 +486,11 @@ export async function refreshToken(req: Request, res: Response): Promise<Respons
       logger.warn(`Usuario no encontrado en refreshToken con ID: ${id}`);
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     }
-<<<<<<< HEAD
     logger.info({ user: user._id }, 'Usuario para refresh token');
 
     const newToken = await generateToken(user, res);
     logger.info(`Nuevo token generado para el usuario con ID: ${id}`);
     logger.info({ token: newToken }, 'Nuevo token generado');
-=======
-
-    const newToken = await generateToken(user, res);
-    logger.info(`Nuevo token generado para el usuario con ID: ${id}`);
->>>>>>> develop
     return res.status(200).json({
       token: newToken
     });
@@ -650,10 +636,7 @@ export const removeFriendBoth = async (req: Request, res: Response) => {
       logger.error(`IDs invalidos en removeFriendBoth: ${msg}`);
       return res.status(400).json({ ok: false, message: 'ID no valido', detail: msg });
     }
-<<<<<<< HEAD
     logger.error({ error: e }, 'removeFriendBoth error');
-=======
->>>>>>> develop
     logger.error(`Error en removeFriendBoth: ${msg}`);
     return res.status(500).json({ ok: false, message: 'No se pudo eliminar la amistad' });
   }
@@ -670,10 +653,7 @@ export const getChatBetween = async (req: Request, res: Response) => {
     const messages = await userService.getChatBetween(userId, friendId);
     res.json(messages);
   } catch (err) {
-<<<<<<< HEAD
     logger.error({ error: err }, 'Error al obtener chat');
-=======
->>>>>>> develop
     res.status(500).json({ message: 'Error al obtener chat' });
   }
 };
@@ -690,10 +670,7 @@ export const postChatMessage = async (req: Request, res: Response) => {
     const msg = await userService.addChatMessage(userId, friendId, text.trim());
     res.status(201).json(msg);
   } catch (err) {
-<<<<<<< HEAD
     logger.error({ error: err }, 'Error al guardar mensaje');
-=======
->>>>>>> develop
     res.status(500).json({ message: 'Error al guardar mensaje' });
   }
 };
@@ -709,10 +686,7 @@ export const getEventChatForEvent = async (req: Request, res: Response) => {
     const messages = await userService.getEventChat(eventId);
     return res.json(messages);
   } catch (err) {
-<<<<<<< HEAD
     logger.error({ error: err }, 'Error al obtener chat de evento');
-=======
->>>>>>> develop
     return res.status(500).json({ message: 'Error al obtener chat de evento' });
   }
 };
@@ -734,10 +708,7 @@ export const postEventChatMessage = async (req: Request, res: Response) => {
     );
     return res.status(201).json(msg);
   } catch (err) {
-<<<<<<< HEAD
     logger.error({ error: err }, 'Error al guardar mensaje de evento');
-=======
->>>>>>> develop
     return res
       .status(500)
       .json({ message: 'Error al guardar mensaje de evento' });
