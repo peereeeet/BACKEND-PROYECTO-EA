@@ -1,6 +1,7 @@
 import { Evento, IEvento } from '../models/evento';
 import { Types } from 'mongoose';
 import axios from 'axios';
+import { logger } from '../config/logger';
 
 export class EventoService {
   async createEvento(data: Partial<IEvento>): Promise<IEvento> {
@@ -104,6 +105,38 @@ export class EventoService {
     return await Evento.find({ creador: creadorId }).populate('creador', 'username gmail');
   }
 
+  async getEventosWithinBounds(
+    north: number,
+    south: number,
+    east: number,
+    west: number,
+    page: number,
+    limit: number
+  ): Promise<{ data: IEvento[]; page: number; totalPages: number; totalItems: number }> {
+    const filter: any = {
+      lat: { $gte: south, $lte: north },
+      lng: { $gte: west, $lte: east }
+    };
+
+    const skip = (page - 1) * limit;
+
+    const [total, eventos] = await Promise.all([
+      Evento.countDocuments(filter),
+      Evento.find(filter)
+        .skip(skip)
+        .limit(limit)
+        .populate('participantes', 'username gmail')
+        .populate('creador', 'username gmail'),
+    ]);
+
+    return {
+      data: eventos as any,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      totalItems: total,
+    };
+  }
+
   async geocodeAddress(
     address: string
   ): Promise<{ lat: number; lng: number } | null> {
@@ -124,7 +157,7 @@ export class EventoService {
 
       const data = resp.data;
       if (!Array.isArray(data) || data.length === 0) {
-        console.warn('[EventoService] Geocoding sin resultados para:', address);
+        logger.warn(`[EventoService] Geocoding sin resultados para:, ${address}`);
         return null;
       }
 
@@ -133,13 +166,13 @@ export class EventoService {
       const lon = parseFloat(first.lon);
 
       if (Number.isNaN(lat) || Number.isNaN(lon)) {
-        console.warn('[EventoService] Geocoding: lat/lon inválidos para:', address);
+        logger.warn(`[EventoService] Geocoding: lat/lon inválidos para: ${address}`);
         return null;
       }
 
       return { lat, lng: lon };
     } catch (err) {
-      console.error('[EventoService] Error geocodificando dirección (Nominatim):', err);
+      logger.error(`[EventoService] Error geocodificando dirección (Nominatim): ${err}`);
       return null;
     }
   }
