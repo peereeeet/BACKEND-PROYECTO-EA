@@ -3,7 +3,7 @@ import { Schema, model, Types } from 'mongoose';
 export interface IEvento {
   _id: Types.ObjectId;
   name: string;
-  schedule: string;
+  schedule: Date;
   address?: string;
   lat?: number;
   lng?: number;
@@ -15,7 +15,7 @@ export interface IEvento {
 
 const eventoSchema = new Schema<IEvento>({
   name: { type: String, required: true },
-  schedule: { type: String, required: true },
+  schedule: { type: Date, required: true },
   address: { type: String },
   lat: { type: Number },
   lng: { type: Number },

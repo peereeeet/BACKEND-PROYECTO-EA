@@ -3,6 +3,7 @@ import {
   createEvento,
   createEventoFromPanel,
   getAllEventos,
+  getUpcomingEventos,
   getEventoById,
   updateEventoById,
   checkEventNameExists,
@@ -10,7 +11,8 @@ import {
   joinEvento,      
   leaveEvento,    
   getMisEventos,
-  getEventosByBounds
+  getEventosByBounds,
+  searchEventos
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 
@@ -52,6 +54,106 @@ const router = Router();
  *         description: Error del servidor
  */
 router.get('/by-bounds', getEventosByBounds);
+
+/**
+ * @swagger
+ * /api/event/upcoming:
+ *   get:
+ *     summary: Obtener solo eventos futuros (no pasados), paginados
+ *     tags: [Eventos]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: Número de página (por defecto 1)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Tamaño de página (por defecto 10)
+ *     responses:
+ *       200:
+ *         description: Lista de eventos futuros paginados
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/upcoming', getUpcomingEventos);
+
+/**
+ * @swagger
+ * /api/event/search:
+ *   get:
+ *     summary: Buscar eventos por nombre y/o fecha
+ *     tags: [Eventos]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Término de búsqueda para el nombre del evento
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha inicial (YYYY-MM-DD)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha final (YYYY-MM-DD)
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: number
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: number
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Eventos encontrados
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Evento'
+ *                 page:
+ *                   type: number
+ *                 totalPages:
+ *                   type: number
+ *                 totalItems:
+ *                   type: number
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/search', searchEventos);
+
+/**
+ * @swagger
+ * /api/event/user/my-events:
+ *   get:
+ *     summary: Obtener eventos creados e inscritos del usuario autenticado
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Listado de eventos del usuario
+ *       401:
+ *         description: No autenticado
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/user/my-events', authenticateToken, getMisEventos);
 
 /**
  * @swagger
@@ -183,62 +285,6 @@ router.post('/create-from-panel', authenticateToken, createEventoFromPanel);
 
 /**
  * @swagger
- * /api/event/{id}:
- *   put:
- *     summary: Actualizar un evento
- *     tags: [Eventos]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Evento'
- *     responses:
- *       200:
- *         description: Evento actualizado correctamente
- *       400:
- *         description: Datos inválidos
- *       404:
- *         description: Evento no encontrado
- *       500:
- *         description: Error del servidor
- */
-router.put('/:id', authenticateToken, updateEventoById);
-
-/**
- * @swagger
- * /api/event/{id}:
- *   delete:
- *     summary: Eliminar un evento
- *     tags: [Eventos]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Evento eliminado correctamente
- *       404:
- *         description: Evento no encontrado
- *       500:
- *         description: Error del servidor
- */
-router.delete('/:id', authenticateToken, deleteEventoById); 
-
-/**
- * @swagger
  * /api/event/check-name:
  *   post:
  *     summary: Comprobar si existe un evento con un nombre dado
@@ -320,20 +366,58 @@ router.post('/:id/leave', authenticateToken, leaveEvento);
 
 /**
  * @swagger
- * /api/event/user/my-events:
- *   get:
- *     summary: Obtener eventos creados e inscritos del usuario autenticado
+ * /api/event/{id}:
+ *   put:
+ *     summary: Actualizar un evento
  *     tags: [Eventos]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Evento'
  *     responses:
  *       200:
- *         description: Listado de eventos del usuario
- *       401:
- *         description: No autenticado
+ *         description: Evento actualizado correctamente
+ *       400:
+ *         description: Datos inválidos
+ *       404:
+ *         description: Evento no encontrado
  *       500:
  *         description: Error del servidor
  */
-router.get('/user/my-events', authenticateToken, getMisEventos);
+router.put('/:id', authenticateToken, updateEventoById);
+
+/**
+ * @swagger
+ * /api/event/{id}:
+ *   delete:
+ *     summary: Eliminar un evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Evento eliminado correctamente
+ *       404:
+ *         description: Evento no encontrado
+ *       500:
+ *         description: Error del servidor
+ */
+router.delete('/:id', authenticateToken, deleteEventoById); 
 
 export default router;
