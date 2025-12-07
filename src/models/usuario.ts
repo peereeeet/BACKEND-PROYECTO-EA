@@ -5,10 +5,10 @@ export interface IUsuario {
   _id: Types.ObjectId;
   username: string;
   gmail: string;
-  password: string;
+  password?: string;
   resetPasswordToken?: string | null;
   resetPasswordExpires?: Date | null;
-  birthday: Date;
+  birthday?: Date;
   eventos: Types.ObjectId[];
   rol: 'admin' | 'usuario';
   friends: Types.ObjectId[];
@@ -19,16 +19,20 @@ export interface IUsuario {
   comparePassword(candidatePassword: string): Promise<boolean>;
   isModified(path: string): boolean;
   isActive: boolean;
+  isGoogleUser?: boolean;
+  googleId?: string | null;
 }
 
 const usuarioSchema = new Schema<IUsuario>({
   username: { type: String, required: true, unique: true },
   gmail: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  password: { type: String, required: function () {return !(this as any).isGoogleUser;} },
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },
-  birthday: { type: Date, required: true },
+  birthday: { type: Date, required: function () {return !(this as any).isGoogleUser;} },
   isActive: { type: Boolean, default: true },
+  isGoogleUser: { type: Boolean, default: false },
+  googleId: { type: String, default: null },
   friends: [{ type: Schema.Types.ObjectId, ref: 'Usuario', index: true }],
   friendRequest: [{type: Schema.Types.ObjectId, ref: 'Usuario', index: true}],
   sentRequests: [{type: Schema.Types.ObjectId, ref: 'Usuario', index: true}],
@@ -44,15 +48,28 @@ const usuarioSchema = new Schema<IUsuario>({
 usuarioSchema.index({ username: 'text', gmail: 'text' });
 
 usuarioSchema.pre<IUsuario>('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt();
-  const hash = await bcrypt.hash(this.password, salt);
-  this.password = hash;
-  next();
+  const user = this;
+  if (!user.isModified('password')) {
+    return next();
+  }
+  if (!user.password) {
+    return next();
+  }
+  try {
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(user.password, salt);
+    return next();
+  } catch (err) {
+    return next(err as any);
+  }
 });
 
 usuarioSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
-  return await bcrypt.compare(candidatePassword, this.password);
+  const user = this as IUsuario;
+  if (!user.password) {
+    return false;
+  }
+  return bcrypt.compare(candidatePassword, user.password);
 };
 
 export interface IChatMessage extends Document {

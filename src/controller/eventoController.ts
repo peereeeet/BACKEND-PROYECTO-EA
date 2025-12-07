@@ -64,7 +64,7 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
 
     const created = await eventoService.createEvento({
       name,
-      schedule: scheduleStr,
+      schedule: new Date(scheduleStr) as any,
       address,
       lat: latNum,
       lng: lngNum,
@@ -178,7 +178,7 @@ export async function createEventoFromPanel(req: Request, res: Response) {
 export const getAllEventos = async (req: Request, res: Response): Promise<void> => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 6));
     const skip = (page - 1) * limit;
 
     const [total, eventos] = await Promise.all([
@@ -199,6 +199,37 @@ export const getAllEventos = async (req: Request, res: Response): Promise<void> 
   } catch (error) {
     logger.error(`Error al obtener eventos: ${(error as Error).message}`);
     res.status(500).json({ message: 'Error al obtener eventos', error });
+  }
+};
+
+export const getUpcomingEventos = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
+    const skip = (page - 1) * limit;
+    const now = new Date();
+    const filter = { schedule: { $gte: now } };
+
+    const [total, eventos] = await Promise.all([
+      Evento.countDocuments(filter),
+      Evento.find(filter)
+        .sort({ schedule: 1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('participantes', 'username gmail')
+        .populate('creador', 'username gmail')
+    ]);
+
+    logger.info(`Obteniendo eventos futuros - Página: ${page}, Límite: ${limit}`);
+    res.status(200).json({
+      data: eventos,
+      page,
+      totalPages: Math.ceil(total / limit),
+      totalItems: total
+    });
+  } catch (error) {
+    logger.error(`Error al obtener eventos futuros: ${(error as Error).message}`);
+    res.status(500).json({ message: 'Error al obtener eventos futuros', error });
   }
 };
 
@@ -444,6 +475,71 @@ export const checkEventNameExists = async (req: Request, res: Response): Promise
       exists: false,
       error: 'Error al verificar el título del evento',
       details: error instanceof Error ? error.message : error
+    });
+  }
+};
+
+export const searchEventos = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
+    const skip = (page - 1) * limit;
+    
+    const searchTerm = (req.query.search as string) || '';
+    const dateFrom = req.query.dateFrom as string;
+    const dateTo = req.query.dateTo as string;
+    
+    const filter: any = {};
+    
+    if (searchTerm && searchTerm.trim()) {
+      filter.name = { $regex: searchTerm.trim(), $options: 'i' };
+      logger.info(`🔍 Aplicando filtro por nombre: "${searchTerm.trim()}"`);
+    }
+    
+    if (dateFrom || dateTo) {
+      if (dateFrom && dateTo) {
+        const fromDate = new Date(dateFrom + 'T00:00:00.000Z');
+        const toDate = new Date(dateTo + 'T23:59:59.999Z');
+        
+        filter.schedule = {
+          $gte: fromDate,
+          $lte: toDate
+        };
+        logger.info(`📅 Filtro por rango: ${fromDate.toISOString()} hasta ${toDate.toISOString()}`);
+      } else if (dateFrom) {
+        const fromDate = new Date(dateFrom + 'T00:00:00.000Z');
+        filter.schedule = { $gte: fromDate };
+        logger.info(`📅 Filtro desde: ${fromDate.toISOString()}`);
+      } else if (dateTo) {
+        const toDate = new Date(dateTo + 'T23:59:59.999Z');
+        filter.schedule = { $lte: toDate };
+        logger.info(`📅 Filtro hasta: ${toDate.toISOString()}`);
+      }
+    }
+    
+    const [total, eventos] = await Promise.all([
+      Evento.countDocuments(filter),
+      Evento.find(filter)
+        .skip(skip)
+        .limit(limit)
+        .populate('participantes', 'username gmail')
+        .populate('creador', 'username gmail')
+        .sort({ schedule: 1 })
+    ]);
+    
+    logger.info(`✅ Búsqueda completada - Total: ${total}, Devueltos: ${eventos.length}`);
+    
+    res.status(200).json({
+      data: eventos,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      totalItems: total
+    });
+  } catch (error) {
+    logger.error(`❌ Error en búsqueda de eventos: ${(error as Error).message}`);
+    res.status(500).json({ 
+      message: 'Error en búsqueda de eventos', 
+      error: (error as Error).message 
     });
   }
 };

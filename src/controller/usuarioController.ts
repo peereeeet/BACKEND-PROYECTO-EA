@@ -7,7 +7,6 @@ import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
 import {logger } from '../config/logger';
 import { OAuth2Client } from 'google-auth-library';
-import crypto from 'crypto';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');
@@ -36,8 +35,21 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { password } = req.body as { password?: string };
 
+    const user = await Usuario.findById(id);
+    if (!user) {
+      logger.warn(`Intento de eliminación de usuario inexistente. ID: ${id}`);
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    if (user.isGoogleUser) {
+      await Usuario.findByIdAndUpdate(id, { isActive: false });
+
+      logger.info(`Usuario (Google) con ID: ${id} eliminado (sin contraseña).`);
+      return res.status(204).send();
+    }
+
     if (!password) {
-      logger.warn('Intento de eliminacion de usuario sin proporcionar contraseña');
+      logger.warn('Intento de eliminación de usuario sin proporcionar contraseña');
       return res.status(400).json({ message: 'Contraseña requerida.' });
     }
 
@@ -46,6 +58,7 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
       logger.warn(`Contraseña incorrecta para eliminar el usuario con ID: ${id}`);
       return res.status(401).json({ message: 'Contraseña incorrecta.' });
     }
+
     logger.info(`Usuario con ID: ${id} eliminado correctamente`);
     return res.status(204).send();
   } catch (err) {
@@ -307,6 +320,17 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
         message: 'CREDENCIALES INCORRECTAS' 
       });
     }
+
+    if (user.isGoogleUser) {
+      return res.status(400).json({
+        message: 'Esta cuenta se registró con Google. Usa "Continuar con Google".'
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'USER_DISABLED' });
+    }
+
     const token = await generateToken(user!, res);
     const refreshToken = await generateRefreshToken(user!, res);
 
@@ -323,13 +347,12 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
   }
 }
 
-export async function loginWithGoogle(req: Request, res: Response): Promise<Response> {
+export async function loginWithGoogle(req: Request, res: Response) {
   try {
-    const { credential } = req.body || {};
+    const { credential, birthday } = req.body;
 
     if (!credential) {
-      logger.warn('Falta credential de Google en la petición');
-      return res.status(400).json({ message: 'Falta credential de Google' });
+      return res.status(400).json({ message: 'Falta el token de Google' });
     }
 
     const ticket = await googleClient.verifyIdToken({
@@ -338,63 +361,90 @@ export async function loginWithGoogle(req: Request, res: Response): Promise<Resp
     });
 
     const payload = ticket.getPayload();
-    if (!payload) {
-      logger.warn('Payload vacío en token de Google');
-      return res.status(401).json({ message: 'Token de Google no válido' });
+    if (!payload || !payload.email) {
+      return res.status(400).json({ message: 'Token de Google no válido' });
     }
 
     const gmail = payload.email;
+    const googleId = payload.sub || null;
     const name =
       payload.name ||
-      payload.given_name ||
-      (gmail ? gmail.split('@')[0] : 'usuario_google');
+      (gmail.includes('@') ? gmail.split('@')[0] : gmail);
 
-    if (!gmail) {
-      logger.warn('Google no devolvió email');
-      return res.status(400).json({ message: 'Google no devolvió email' });
+    let birthdayDate: Date | undefined = undefined;
+    if (birthday) {
+      const parsed = new Date(birthday as string);
+      if (!Number.isNaN(parsed.getTime())) {
+        birthdayDate = parsed;
+      }
+    }
+
+    if (!birthdayDate) {
+      const rawBirth =
+        (payload as any).birthdate ||
+        (payload as any).birthday;
+      if (rawBirth) {
+        const parsed = new Date(rawBirth as string);
+        if (!Number.isNaN(parsed.getTime())) {
+          birthdayDate = parsed;
+        }
+      }
     }
 
     let user = await Usuario.findOne({ gmail });
 
     if (!user) {
-      const randomPassword = crypto.randomBytes(16).toString('hex');
       user = new Usuario({
         username: name,
         gmail,
-        password: '1234567',
-        birthday: new Date('2000-01-01'),
+        birthday: birthdayDate,
         rol: 'usuario',
-      });
+        isGoogleUser: true,
+        googleId,
+      } as Partial<IUsuario>);
 
       await user.save();
-      logger.info(`Usuario creado via Google: ${gmail}`);
+    } else {
+      if (!user.isGoogleUser) {
+        return res.status(400).json({
+          message:
+            'Esta cuenta ya existe sin Google. Inicia sesión con usuario y contraseña.',
+        });
+      }
+
+      let mustSave = false;
+      if (!user.googleId && googleId) {
+        user.googleId = googleId;
+        mustSave = true;
+      }
+      if (!user.birthday && birthdayDate) {
+        user.birthday = birthdayDate;
+        mustSave = true;
+      }
+      if (mustSave) {
+        await user.save();
+      }
     }
 
     if (!user.isActive) {
-      logger.warn(`Usuario ${gmail} intentó loguearse pero está deshabilitado`);
-      return res.status(403).json({ message: 'Cuenta deshabilitada' });
+      return res.status(403).json({ message: 'USER_DISABLED' });
     }
 
-    const token = await generateToken(user, res);
-    const refreshToken = await generateRefreshToken(user, res);
-
-    logger.info(`Login con Google exitoso para ${gmail}`);
+    const token = await generateToken(user!, res);
+    const refreshToken = await generateRefreshToken(user!, res);
 
     return res.status(200).json({
-      message: 'LOGIN GOOGLE EXITOSO',
-      user: removePassword(user),
+      message: 'LOGIN EXITOSO',
+      user,
       token,
       refreshToken,
     });
-  } catch (error: any) {
-    logger.error(
-      `Error en loginWithGoogle: ${
-        error instanceof Error ? error.message : JSON.stringify(error)
-      }`
-    );
-    return res.status(500).json({ error: 'ERROR EN LOGIN CON GOOGLE' });
+  } catch (error) {
+    console.error('Error en loginWithGoogle:', error);
+    return res.status(500).json({ message: 'ERROR EN LOGIN CON GOOGLE' });
   }
 }
+
 
 /* Create admin only development */
 export async function createAdminUser(req: Request, res: Response): Promise<Response> {
