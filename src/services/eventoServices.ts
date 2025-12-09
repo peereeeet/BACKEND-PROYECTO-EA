@@ -113,9 +113,11 @@ export class EventoService {
     page: number,
     limit: number
   ): Promise<{ data: IEvento[]; page: number; totalPages: number; totalItems: number }> {
+    const now = new Date();
     const filter: any = {
       lat: { $gte: south, $lte: north },
-      lng: { $gte: west, $lte: east }
+      lng: { $gte: west, $lte: east },
+      schedule: { $gte: now } // Solo eventos futuros
     };
 
     const skip = (page - 1) * limit;
@@ -123,6 +125,7 @@ export class EventoService {
     const [total, eventos] = await Promise.all([
       Evento.countDocuments(filter),
       Evento.find(filter)
+        .sort({ schedule: 1 }) // Ordenar por fecha
         .skip(skip)
         .limit(limit)
         .populate('participantes', 'username gmail')

@@ -23,7 +23,7 @@ function canModifyEvento(userRol: string, userId: string, creadorId: string): bo
 
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
-    const { name, schedule, address, lat, lng } = req.body;
+    const { name, schedule, address, lat, lng, categoria } = req.body;
     const creadorId = (req as any).user?.payload?.id; 
 
     if (!creadorId) {
@@ -66,6 +66,7 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       name,
       schedule: new Date(scheduleStr) as any,
       address,
+      categoria,
       lat: latNum,
       lng: lngNum,
       participantes: allParticipantesIds as any,
