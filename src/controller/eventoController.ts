@@ -489,8 +489,14 @@ export const searchEventos = async (req: Request, res: Response): Promise<void> 
     const searchTerm = (req.query.search as string) || '';
     const dateFrom = req.query.dateFrom as string;
     const dateTo = req.query.dateTo as string;
+    const categoria = req.query.categoria as string;
     
     const filter: any = {};
+
+    if (categoria && categoria.trim()) {
+      filter.categoria = categoria.trim();
+      logger.info(`🏷️ Aplicando filtro por categoría: "${categoria.trim()}"`);
+    }
     
     if (searchTerm && searchTerm.trim()) {
       filter.name = { $regex: searchTerm.trim(), $options: 'i' };
