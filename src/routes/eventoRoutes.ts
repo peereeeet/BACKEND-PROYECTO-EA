@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import multer from 'multer'; // <--- 1. Importar Multer
+import path from 'path';     // <--- 2. Importar Path
 import {
   createEvento,
   createEventoFromPanel,
@@ -12,9 +14,26 @@ import {
   leaveEvento,    
   getMisEventos,
   getEventosByBounds,
-  searchEventos
+  searchEventos,
+  uploadEventoPhoto // <--- 3. Importaremos esta nueva función del controlador
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
+
+
+// --- CONFIGURACIÓN DE MULTER ---
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Asegúrate de que esta carpeta 'uploads/' exista en la raíz de tu proyecto
+    cb(null, 'uploads/'); 
+  },
+  filename: (req, file, cb) => {
+    // Nombre único: timestamp + extensión original
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+// -------------------------------
 
 const router = Router();
 
@@ -419,5 +438,41 @@ router.put('/:id', authenticateToken, updateEventoById);
  *         description: Error del servidor
  */
 router.delete('/:id', authenticateToken, deleteEventoById); 
+
+
+/**
+ * @swagger
+ * /api/event/{id}/upload:
+ * post:
+ * summary: Subir una foto al evento
+ * tags: [Eventos]
+ * security:
+ * - bearerAuth: []
+ * parameters:
+ * - in: path
+ * name: id
+ * required: true
+ * schema:
+ * type: string
+ * requestBody:
+ * content:
+ * multipart/form-data:
+ * schema:
+ * type: object
+ * properties:
+ * image:
+ * type: string
+ * format: binary
+ * responses:
+ * 200:
+ * description: Foto subida correctamente
+ * 400:
+ * description: Error al subir archivo
+ * 404:
+ * description: Evento no encontrado
+ * 500:
+ * description: Error del servidor
+ */
+router.post('/:id/upload', authenticateToken, upload.single('image'), uploadEventoPhoto);
 
 export default router;

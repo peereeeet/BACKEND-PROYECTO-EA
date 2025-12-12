@@ -12,6 +12,7 @@ import valoracionRoutes from './routes/valoracionRoutes';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import {logger } from './config/logger';
+import path from 'path';
 
 const app = express();
 const PORT = 3000;
@@ -31,6 +32,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.json() as express.RequestHandler);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // RUTAS REST
 app.use('/api/user', usuarioRoutes);

@@ -550,3 +550,35 @@ export const searchEventos = async (req: Request, res: Response): Promise<void> 
     });
   }
 };
+
+export const uploadEventoPhoto = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Multer añade el objeto 'file' a la request
+    if (!req.file) {
+      return res.status(400).json({ message: 'No se ha subido ningún archivo' });
+    }
+
+    // Construimos la URL. 
+    // NOTA: Ajusta 'localhost:3000' a tu dominio real o variable de entorno
+    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+
+    // Buscamos el evento y añadimos la URL al array 'photos'
+    const eventoActualizado = await Evento.findByIdAndUpdate(
+      id,
+      { $push: { photos: imageUrl } }, 
+      { new: true } // Para que devuelva el objeto actualizado
+    );
+
+    if (!eventoActualizado) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    return res.status(200).json(eventoActualizado);
+
+  } catch (error) {
+    console.error('Error al subir foto:', error);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
