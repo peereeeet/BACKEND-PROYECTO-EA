@@ -179,4 +179,16 @@ export class EventoService {
       return null;
     }
   }
+
+async getEventosByAiFilter(filter: any): Promise<IEvento[]> {
+
+  if (!filter.schedule) {
+    filter.schedule = { $gte: new Date() };
+  }
+  
+  return await Evento.find(filter)
+    .populate('creador', 'username gmail')
+    .sort({ schedule: 1 })
+    .limit(20); 
+}
 }

@@ -9,6 +9,7 @@ import swaggerSpec from './config/swagger';
 import eventoRoutes from './routes/eventoRoutes';
 import { UserService } from './services/usuarioServices';
 import valoracionRoutes from './routes/valoracionRoutes';
+import aiRoutes from './routes/aiRoutes';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import {logger } from './config/logger';
@@ -36,6 +37,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
 app.use('/api/ratings', valoracionRoutes);
+app.use('/api/ai', aiRoutes);
 
 ////////////////////// CONEXIÓN A BBDD //////////////////////
 mongoose
