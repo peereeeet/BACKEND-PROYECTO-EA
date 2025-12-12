@@ -23,7 +23,7 @@ function canModifyEvento(userRol: string, userId: string, creadorId: string): bo
 
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
-    const { name, schedule, address, lat, lng, categoria } = req.body;
+    const { name, schedule, address, lat, lng, categoria, isPrivate, invitados } = req.body;
     const creadorId = (req as any).user?.payload?.id; 
 
     if (!creadorId) {
@@ -62,6 +62,15 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       }
     }
 
+    // Procesar invitados para eventos privados
+    let invitadosIds: string[] = [];
+    let invitacionesPendientesIds: string[] = [];
+
+    if (isPrivate && Array.isArray(invitados) && invitados.length > 0) {
+      // Los invitados van a invitacionesPendientes hasta que acepten
+      invitacionesPendientesIds = invitados.map((id: string) => id.toString());
+    }
+
     const created = await eventoService.createEvento({
       name,
       schedule: new Date(scheduleStr) as any,
@@ -70,7 +79,10 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       lat: latNum,
       lng: lngNum,
       participantes: allParticipantesIds as any,
-      creador: creadorId 
+      creador: creadorId,
+      isPrivate: isPrivate || false,
+      invitados: invitadosIds as any,
+      invitacionesPendientes: invitacionesPendientesIds as any
     });
 
     if (allParticipantesIds.length > 0) {
@@ -83,8 +95,12 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
     const populated = await Evento.findById(created._id)
       .populate('participantes', 'username gmail')
       .populate('creador', 'username gmail')
+      .populate('invitados', 'username gmail')
+      .populate('invitacionesPendientes', 'username gmail')
       .exec();
-    logger.info(`Evento creado con ID: ${created._id} por usuario ${creadorId}`);
+    
+    logger.info(`Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, invitados: ${invitacionesPendientesIds.length}`);
+    
     return res.status(201).json(populated ?? created);
   } catch (error) {
     logger.error(`Error al crear evento: ${(error as Error).message}`);
