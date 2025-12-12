@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { ChatMessageModel, IChatMessage, EventChatMessageModel, IEventChatMessage } from '../models/usuario';
 import { io } from '../index';
+import gamificacionService from './gamificacionServices';
 
 function sha256(v:string){ return crypto.createHash('sha256').update(v).digest('hex'); }
 
@@ -313,6 +314,15 @@ export class UserService {
         { $addToSet: { friends: userObjectId }, $pull: { sentRequests: userObjectId } }
       ),
     ]);
+
+    try {
+      await Promise.all([
+        gamificacionService.otorgarPuntos(userId, 'hacerAmigo'),
+        gamificacionService.otorgarPuntos(requesterId, 'hacerAmigo')
+      ]);
+    } catch (err) {
+      logger.error(`Error al otorgar puntos por amistad: ${err}`);
+    }
 
     return { message: 'Solicitud aceptada correctamente' };
   }
