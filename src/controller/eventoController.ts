@@ -3,8 +3,10 @@ import { EventoService } from '../services/eventoServices';
 import { Usuario } from '../models/usuario';
 import { Evento } from '../models/evento';
 import { logger } from '../config/logger';
+import { AiServices } from '../services/aiServices';
 
 const eventoService = new EventoService();
+const aiService = new AiServices();
 
 function normalizeSchedule(s: any): string {
   if (Array.isArray(s)) return s[0] || '';
