@@ -1,13 +1,17 @@
 import { Request, Response } from 'express';
 import { ValoracionService } from '../services/valoracionServices';
+import { GamificacionService } from '../services/gamificacionServices';
 import {logger} from "../config/logger";
 
 const service = new ValoracionService();
+const gamificacionService = new GamificacionService();
 
 export async function createValoracion(req: Request, res: Response) {
   try {
     const { eventoId } = req.params;
     const { puntuacion, comentario } = req.body;
+    const usuarioId = (req as any).user?.id;
+
     if (!eventoId){
       logger.warn('Falta eventoId al crear valoración');
       return res.status(400).json({ message: 'Falta eventoId' });
@@ -17,9 +21,28 @@ export async function createValoracion(req: Request, res: Response) {
       return res.status(400).json({ message: 'puntuacion debe ser 1..5' });
     }
 
-    const doc = await service.createValoracion(eventoId, { puntuacion, comentario });
+    const doc = await service.createValoracion(eventoId, { puntuacion, comentario }, usuarioId);
     logger.info(`Valoración creada para el evento ${eventoId}`);
-    return res.status(201).json(doc);
+    
+    let gamificacionData = null;
+    if (usuarioId) {
+      try {
+        const progreso = await gamificacionService.obtenerProgreso(usuarioId);
+        gamificacionData = {
+          puntos: progreso.puntos,
+          nivel: progreso.nivel,
+          insignias: progreso.insignias,
+          estadisticas: progreso.estadisticas
+        };
+      } catch (err) {
+        logger.error(`Error al obtener progreso de gamificación: ${err}`);
+      }
+    }
+    
+    return res.status(201).json({
+      valoracion: doc,
+      gamificacion: gamificacionData
+    });
   } catch (err: any) {
     if (err?.code === 11000) {
       logger.error('Conflicto por índice único al crear valoración');
