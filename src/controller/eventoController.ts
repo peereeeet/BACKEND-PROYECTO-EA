@@ -550,3 +550,206 @@ export const searchEventos = async (req: Request, res: Response): Promise<void> 
     });
   }
 };
+
+// ==================== CONTROLADORES DE EVENTOS PRIVADOS ====================
+
+/**
+ * Invitar usuarios a un evento privado (solo creador)
+ */
+export async function inviteUsersToPrivateEvent(req: Request, res: Response): Promise<Response> {
+  try {
+    const { id: eventoId } = req.params;
+    const { userIds } = req.body;
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ message: 'Debe proporcionar una lista de IDs de usuarios' });
+    }
+
+    const evento = await Evento.findById(eventoId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    if (!evento.isPrivate) {
+      return res.status(400).json({ message: 'El evento no es privado' });
+    }
+
+    if (evento.creador.toString() !== userId.toString()) {
+      return res.status(403).json({ message: 'Solo el creador puede invitar usuarios' });
+    }
+
+    const eventoActualizado = await eventoService.inviteUsersToEvent(eventoId, userIds);
+    
+    return res.status(200).json({
+      message: 'Invitaciones enviadas correctamente',
+      evento: eventoActualizado
+    });
+  } catch (error) {
+    logger.error(`Error invitando usuarios: ${error}`);
+    return res.status(500).json({ message: 'Error invitando usuarios', error: (error as Error).message });
+  }
+}
+
+/**
+ * Aceptar invitación a un evento privado
+ */
+export async function acceptPrivateEventInvitation(req: Request, res: Response): Promise<Response> {
+  try {
+    const { id: eventoId } = req.params;
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const evento = await Evento.findById(eventoId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isPending = evento.invitacionesPendientes.some(id => id.toString() === userId.toString());
+    if (!isPending) {
+      return res.status(400).json({ message: 'No tienes invitación pendiente para este evento' });
+    }
+
+    const eventoActualizado = await eventoService.acceptInvitation(eventoId, userId);
+    
+    // Actualizar también el array de eventos del usuario
+    await Usuario.findByIdAndUpdate(
+      userId,
+      { $addToSet: { eventos: eventoId } }
+    );
+
+    return res.status(200).json({
+      message: 'Invitación aceptada correctamente',
+      evento: eventoActualizado
+    });
+  } catch (error) {
+    logger.error(`Error aceptando invitación: ${error}`);
+    return res.status(500).json({ message: 'Error aceptando invitación', error: (error as Error).message });
+  }
+}
+
+/**
+ * Rechazar invitación a un evento privado
+ */
+export async function rejectPrivateEventInvitation(req: Request, res: Response): Promise<Response> {
+  try {
+    const { id: eventoId } = req.params;
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const evento = await Evento.findById(eventoId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isPending = evento.invitacionesPendientes.some(id => id.toString() === userId.toString());
+    if (!isPending) {
+      return res.status(400).json({ message: 'No tienes invitación pendiente para este evento' });
+    }
+
+    const eventoActualizado = await eventoService.rejectInvitation(eventoId, userId);
+    
+    return res.status(200).json({
+      message: 'Invitación rechazada',
+      evento: eventoActualizado
+    });
+  } catch (error) {
+    logger.error(`Error rechazando invitación: ${error}`);
+    return res.status(500).json({ message: 'Error rechazando invitación', error: (error as Error).message });
+  }
+}
+
+/**
+ * Obtener invitaciones pendientes del usuario autenticado
+ */
+export async function getMyPendingInvitations(req: Request, res: Response): Promise<Response> {
+  try {
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const invitaciones = await eventoService.getPendingInvitations(userId);
+    
+    return res.status(200).json({
+      count: invitaciones.length,
+      invitaciones
+    });
+  } catch (error) {
+    logger.error(`Error obteniendo invitaciones: ${error}`);
+    return res.status(500).json({ message: 'Error obteniendo invitaciones', error: (error as Error).message });
+  }
+}
+
+/**
+ * Eliminar invitado de un evento privado (solo creador)
+ */
+export async function removeInvitedUserFromEvent(req: Request, res: Response): Promise<Response> {
+  try {
+    const { id: eventoId, userId: targetUserId } = req.params;
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const evento = await Evento.findById(eventoId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    if (evento.creador.toString() !== userId.toString()) {
+      return res.status(403).json({ message: 'Solo el creador puede eliminar invitados' });
+    }
+
+    const eventoActualizado = await eventoService.removeInvitedUser(eventoId, targetUserId);
+    
+    // Actualizar también el array de eventos del usuario eliminado
+    await Usuario.findByIdAndUpdate(
+      targetUserId,
+      { $pull: { eventos: eventoId } }
+    );
+
+    return res.status(200).json({
+      message: 'Usuario eliminado del evento',
+      evento: eventoActualizado
+    });
+  } catch (error) {
+    logger.error(`Error eliminando invitado: ${error}`);
+    return res.status(500).json({ message: 'Error eliminando invitado', error: (error as Error).message });
+  }
+}
+
+/**
+ * Obtener eventos visibles para el usuario (públicos + privados donde está invitado)
+ */
+export async function getEventosVisibles(req: Request, res: Response): Promise<Response> {
+  try {
+    const userId = (req as any).user?.payload?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const eventos = await eventoService.getEventosVisiblesParaUsuario(userId);
+    
+    return res.status(200).json({
+      count: eventos.length,
+      eventos
+    });
+  } catch (error) {
+    logger.error(`Error obteniendo eventos visibles: ${error}`);
+    return res.status(500).json({ message: 'Error obteniendo eventos visibles', error: (error as Error).message });
+  }
+}
