@@ -34,6 +34,7 @@ import {
 } from '../controller/usuarioController';
 import { validateUserContent, validateMessageContent } from '../profanityMiddleware';
 import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
+import { registerValidation, updateProfileValidation } from '../userValidators';
 
 const router = Router();
 
@@ -103,7 +104,7 @@ router.get('/', getAllUsers);
  *       400:
  *         description: Error en los datos del usuario
  */
-router.post('/', validateUserContent, createUser);
+router.post('/', registerValidation, validateUserContent, createUser);
 
 /**
  * @swagger
