@@ -9,6 +9,8 @@ import swaggerSpec from './config/swagger';
 import eventoRoutes from './routes/eventoRoutes';
 import { UserService } from './services/usuarioServices';
 import valoracionRoutes from './routes/valoracionRoutes';
+import gamificacionRoutes from './routes/gamificacionRoutes';
+import gamificacionService from './services/gamificacionServices';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import {logger } from './config/logger';
@@ -32,10 +34,10 @@ app.use(express.json());
 app.use(express.json() as express.RequestHandler);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// RUTAS REST
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
 app.use('/api/ratings', valoracionRoutes);
+app.use('/api/gamificacion', gamificacionRoutes);
 
 ////////////////////// CONEXIÓN A BBDD //////////////////////
 mongoose
@@ -44,6 +46,7 @@ mongoose
     logger.info('CONEXION EXITOSA A LA BASE DE DATOS DE MONGODB');
 
     await usuarioServices.createAdminUser();
+    await gamificacionService.inicializarInsignias();
 
     httpServer.listen(PORT, () => {
       logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);

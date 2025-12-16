@@ -24,7 +24,7 @@ function canModifyEvento(userRol: string, userId: string, creadorId: string): bo
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
     const { name, schedule, address, lat, lng, categoria } = req.body;
-    const creadorId = (req as any).user?.payload?.id; 
+    const creadorId = (req as any).user?.id; 
 
     if (!creadorId) {
       logger.warn('No autenticado al crear evento');
@@ -253,8 +253,8 @@ export async function getEventoById(req: Request, res: Response): Promise<Respon
 export async function deleteEventoById(req: Request, res: Response): Promise<Response> {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.payload?.id;
-    const userRol = (req as any).user?.payload?.rol;
+    const userId = (req as any).user?.id;
+    const userRol = (req as any).user?.rol;
 
     if (!userId) {
       logger.warn('No autenticado al eliminar evento');
@@ -294,8 +294,8 @@ export async function deleteEventoById(req: Request, res: Response): Promise<Res
 export const updateEventoById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.payload?.id;
-    const userRol = (req as any).user?.payload?.rol;
+    const userId = (req as any).user?.id;
+    const userRol = (req as any).user?.rol;
 
     if (!userId) {
       logger.warn('No autenticado al actualizar evento');
@@ -346,7 +346,7 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
 export const joinEvento = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       logger.warn('No autenticado al unirse al evento');
@@ -382,7 +382,7 @@ export const joinEvento = async (req: Request, res: Response): Promise<void> => 
 export const leaveEvento = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       logger.warn('No autenticado al salir del evento');  
@@ -417,7 +417,7 @@ export const leaveEvento = async (req: Request, res: Response): Promise<void> =>
 
 export const getMisEventos = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       logger.warn('No autenticado al obtener mis eventos');
