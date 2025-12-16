@@ -1,17 +1,32 @@
 import { FilterQuery, Types } from 'mongoose';
 import { Valoracion, IValoracion } from '../models/valoracion';
 import { Evento } from '../models/evento';
+import gamificacionService from './gamificacionServices';
+import { logger } from '../config/logger';
 
 export class ValoracionService {
-  async createValoracion(eventoId: string, data: { puntuacion: number; comentario?: string }) {
-  const doc = await Valoracion.create({
-    evento: new Types.ObjectId(eventoId),
-    puntuacion: data.puntuacion,
-    comentario: data.comentario
-  });
-  await this.recalcularAggregatesEvento(eventoId);
-  return doc;
-}
+  async createValoracion(
+    eventoId: string, 
+    data: { puntuacion: number; comentario?: string },
+    usuarioId?: string
+  ) {
+    const doc = await Valoracion.create({
+      evento: new Types.ObjectId(eventoId),
+      puntuacion: data.puntuacion,
+      comentario: data.comentario
+    });
+
+    await this.recalcularAggregatesEvento(eventoId);
+    if (usuarioId) {
+      try {
+        await gamificacionService.otorgarPuntos(usuarioId, 'dejarValoracion');
+      } catch (err) {
+        logger.error(`Error al otorgar puntos por valoración: ${err}`);
+      }
+    }
+
+    return doc;
+  }
 
   async updateValoracion(
     id: string,
