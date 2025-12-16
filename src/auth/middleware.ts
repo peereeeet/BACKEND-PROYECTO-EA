@@ -6,7 +6,7 @@ export function authenticateadminToken(req: Request, res: Response, next: NextFu
   
  
     const authHeader = req.headers["authorization"];
-    const token: string = (authHeader && authHeader.split(" ")[1]) ?? ""; // Bearer <token>
+    const token: string = (authHeader && authHeader.split(" ")[1]) ?? "";
   
 
   if (!token) {
@@ -41,13 +41,11 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
         return res.status(401).json({ error: "Token inválido o expirado" });
     }
 
-    // ✅ CORRECCIÓN: Extraer el payload que contiene {id, rol}
     const payload = (decoded as any).payload;
     if (!payload || !payload.id) {
         return res.status(403).json({ error: "Token inválido: falta información del usuario" });
     }
 
-    // ✅ Asignar el payload (no el decoded completo) a req.user
     (req as any).user = payload;
 
     logger.info(`Token verificado, usuario: ${payload.id}`);
@@ -72,10 +70,8 @@ export function authenticateOwner(req: Request, res: Response, next: NextFunctio
     const userIdFromToken: string = (decoded as any).payload.id;
     const userIdFromParams: string = req.params.id;
 
-    // Solo permitir si es el propio usuario
     if (userIdFromToken === userIdFromParams) {
         logger.info(`Token verificado`);
-        // ✅ CORRECCIÓN: Asignar el payload también aquí
         (req as any).user = (decoded as any).payload;
         next();
     } else {
@@ -98,13 +94,11 @@ export function authenticateRefreshToken(req: Request, res: Response, next: Next
     }
 
     const refreshtokenUserid : string = (decoded as any).payload.id;
-    // Verificar que el userId del body coincide con el del token
     if (refreshtokenUserid !== userId) {
       logger.warn("El userId no coincide con el del token");
       return res.status(403).json({ error: "El userId no coincide con el del token" });
     }
 
-    // ✅ CORRECCIÓN: Asignar el payload también aquí
     (req as any).user = (decoded as any).payload;
 
     logger.info(`token verificado, usuario`);
