@@ -8,21 +8,25 @@ export class ValoracionService {
   async createValoracion(
     eventoId: string, 
     data: { puntuacion: number; comentario?: string },
-    usuarioId?: string
+    usuarioId: string
   ) {
+    if (!usuarioId) {
+      throw new Error('Usuario no autenticado');
+    }
+
     const doc = await Valoracion.create({
       evento: new Types.ObjectId(eventoId),
+      usuario: new Types.ObjectId(usuarioId),
       puntuacion: data.puntuacion,
       comentario: data.comentario
     });
 
     await this.recalcularAggregatesEvento(eventoId);
-    if (usuarioId) {
-      try {
-        await gamificacionService.otorgarPuntos(usuarioId, 'dejarValoracion');
-      } catch (err) {
-        logger.error(`Error al otorgar puntos por valoración: ${err}`);
-      }
+    
+    try {
+      await gamificacionService.otorgarPuntos(usuarioId, 'dejarValoracion');
+    } catch (err) {
+      logger.error(`Error al otorgar puntos por valoración: ${err}`);
     }
 
     return doc;
@@ -45,6 +49,13 @@ export class ValoracionService {
     return await Valoracion.findById(id).exec();
   }
 
+  async getUserValoracionForEvento(eventoId: string, usuarioId: string): Promise<IValoracion | null> {
+    return await Valoracion.findOne({
+      evento: new Types.ObjectId(eventoId),
+      usuario: new Types.ObjectId(usuarioId)
+    }).exec();
+  }
+
   async listByEvento(
     eventoId: string,
     opts: { page?: number; limit?: number; q?: string }
@@ -60,7 +71,12 @@ export class ValoracionService {
     }
 
     const [data, total] = await Promise.all([
-      Valoracion.find(filtro).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      Valoracion.find(filtro)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('usuario', 'username gmail')
+        .exec(),
       Valoracion.countDocuments(filtro).exec()
     ]);
 

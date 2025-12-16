@@ -12,31 +12,35 @@ export async function createValoracion(req: Request, res: Response) {
     const { puntuacion, comentario } = req.body;
     const usuarioId = (req as any).user?.id;
 
+    if (!usuarioId) {
+      logger.warn('Usuario no autenticado al crear valoración');
+      return res.status(401).json({ message: 'Usuario no autenticado' });
+    }
+
     if (!eventoId){
       logger.warn('Falta eventoId al crear valoración');
       return res.status(400).json({ message: 'Falta eventoId' });
-  }
+    }
+    
     if (typeof puntuacion !== 'number' || puntuacion < 1 || puntuacion > 5){
       logger.warn('puntuacion inválida al crear valoración');
       return res.status(400).json({ message: 'puntuacion debe ser 1..5' });
     }
 
     const doc = await service.createValoracion(eventoId, { puntuacion, comentario }, usuarioId);
-    logger.info(`Valoración creada para el evento ${eventoId}`);
+    logger.info(`Valoración creada para el evento ${eventoId} por usuario ${usuarioId}`);
     
     let gamificacionData = null;
-    if (usuarioId) {
-      try {
-        const progreso = await gamificacionService.obtenerProgreso(usuarioId);
-        gamificacionData = {
-          puntos: progreso.puntos,
-          nivel: progreso.nivel,
-          insignias: progreso.insignias,
-          estadisticas: progreso.estadisticas
-        };
-      } catch (err) {
-        logger.error(`Error al obtener progreso de gamificación: ${err}`);
-      }
+    try {
+      const progreso = await gamificacionService.obtenerProgreso(usuarioId);
+      gamificacionData = {
+        puntos: progreso.puntos,
+        nivel: progreso.nivel,
+        insignias: progreso.insignias,
+        estadisticas: progreso.estadisticas
+      };
+    } catch (err) {
+      logger.error(`Error al obtener progreso de gamificación: ${err}`);
     }
     
     return res.status(201).json({
@@ -45,14 +49,36 @@ export async function createValoracion(req: Request, res: Response) {
     });
   } catch (err: any) {
     if (err?.code === 11000) {
-      logger.error('Conflicto por índice único al crear valoración');
+      logger.warn('Usuario ya ha valorado este evento');
       return res.status(409).json({
-        message: 'Conflicto por índice único antiguo (evento/usuario). Elimínalo en MongoDB y reintenta.',
-        hint: 'db.valoracions.dropIndex("evento_1_usuario_1")'
+        message: 'Ya has valorado este evento anteriormente',
+        code: 'DUPLICATE_RATING'
       });
     }
     logger.error(`Error al guardar la valoración: ${err}`);
     return res.status(500).json({ message: 'Error al guardar la valoración', error: err });
+  }
+}
+
+export async function getUserValoracion(req: Request, res: Response) {
+  try {
+    const { eventoId } = req.params;
+    const usuarioId = (req as any).user?.id;
+
+    if (!usuarioId) {
+      return res.status(401).json({ message: 'Usuario no autenticado' });
+    }
+
+    const valoracion = await service.getUserValoracionForEvento(eventoId, usuarioId);
+    
+    if (!valoracion) {
+      return res.status(404).json({ message: 'No has valorado este evento aún' });
+    }
+
+    return res.status(200).json(valoracion);
+  } catch (err) {
+    logger.error(`Error al obtener valoración del usuario: ${err}`);
+    return res.status(500).json({ message: 'Error al obtener valoración', error: err });
   }
 }
 
@@ -61,9 +87,12 @@ export async function updateValoracion(req: Request, res: Response) {
     const { id } = req.params;
     const { puntuacion, comentario } = req.body;
     const data: any = {};
+    
     if (typeof puntuacion === 'number') {
-      logger.warn('puntuacion inválida al actualizar valoración');
-      if (puntuacion < 1 || puntuacion > 5) return res.status(400).json({ message: 'puntuacion debe ser 1..5' });
+      if (puntuacion < 1 || puntuacion > 5) {
+        logger.warn('puntuacion inválida al actualizar valoración');
+        return res.status(400).json({ message: 'puntuacion debe ser 1..5' });
+      }
       data.puntuacion = puntuacion;
     }
     if (typeof comentario === 'string') data.comentario = comentario;
@@ -71,7 +100,7 @@ export async function updateValoracion(req: Request, res: Response) {
     const doc = await service.updateValoracion(id, data);
     if (!doc){
       logger.warn(`Valoración con ID ${id} no encontrada para actualizar`);
-       return res.status(404).json({ message: 'No encontrada' });
+      return res.status(404).json({ message: 'No encontrada' });
     }
     logger.info(`Valoración con ID ${id} actualizada`);
     res.status(200).json(doc);
@@ -84,10 +113,8 @@ export async function updateValoracion(req: Request, res: Response) {
 export async function listValoracionesEvento(req: Request, res: Response) {
   try {
     const { eventoId } = req.params;
-
     const page = parseInt(req.query.page as string) || 1;
     const limit = 6;
-
     const q = (req.query.q as string) || '';
 
     const result = await service.listByEvento(eventoId, { page, limit, q });
@@ -105,7 +132,7 @@ export async function getValoracionById(req: Request, res: Response) {
     const doc = await service.getById(id);
     if (!doc){
       logger.warn(`Valoración con ID ${id} no encontrada`);
-       return res.status(404).json({ message: 'No encontrada' });
+      return res.status(404).json({ message: 'No encontrada' });
     }
     logger.info(`Valoración con ID ${id} obtenida`);
     res.status(200).json(doc);
