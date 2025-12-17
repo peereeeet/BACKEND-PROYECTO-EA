@@ -2,6 +2,7 @@ import { Evento, IEvento } from '../models/evento';
 import { Types } from 'mongoose';
 import axios from 'axios';
 import { logger } from '../config/logger';
+import gamificacionService from './gamificacionServices';
 
 export class EventoService {
   async createEvento(data: Partial<IEvento>): Promise<IEvento> {
@@ -25,8 +26,19 @@ export class EventoService {
     }
 
     const e = new Evento(payload);
-    return await e.save();
+    const evento = await e.save();
+
+    if (data.creador) {
+      try {
+        await gamificacionService.otorgarPuntos(data.creador.toString(), 'crearEvento');
+      } catch (err) {
+        logger.error(`Error al otorgar puntos por crear evento: ${err}`);
+      }
+    }
+
+    return evento;
   }
+
   async createEventoWithCreator(input: {
     name: string;
     address?: string;
@@ -69,6 +81,12 @@ export class EventoService {
 
     const created = await Evento.create(payload);
 
+    try {
+      await gamificacionService.otorgarPuntos(input.creador, 'crearEvento');
+    } catch (err) {
+      logger.error(`Error al otorgar puntos por crear evento: ${err}`);
+    }
+
     return Evento.findById(created._id)
       .populate('creador', 'username gmail')
       .populate('participantes', 'username gmail')
@@ -78,22 +96,34 @@ export class EventoService {
   async getAllEventos(): Promise<IEvento[]> {
     return await Evento.find();
   }
+
   async getEventoById(id: string): Promise<IEvento | null> {
     return await Evento.findById(id);
   }
+
   async deleteEventoById(id: string): Promise<IEvento | null> {
     return await Evento.findByIdAndDelete(id);
   }
 
-   async joinEvento(eventoId: string, userId: string): Promise<IEvento | null> {
-    return await Evento.findByIdAndUpdate(
+  async joinEvento(eventoId: string, userId: string): Promise<IEvento | null> {
+    const evento = await Evento.findByIdAndUpdate(
       eventoId,
       { $addToSet: { participantes: userId } },
       { new: true }
     ).populate('creador', 'username gmail');
+
+    if (evento) {
+      try {
+        await gamificacionService.otorgarPuntos(userId, 'unirseEvento');
+      } catch (err) {
+        logger.error(`Error al otorgar puntos por unirse a evento: ${err}`);
+      }
+    }
+
+    return evento;
   }
 
-   async leaveEvento(eventoId: string, userId: string): Promise<IEvento | null> {
+  async leaveEvento(eventoId: string, userId: string): Promise<IEvento | null> {
     return await Evento.findByIdAndUpdate(
       eventoId,
       { $pull: { participantes: userId } },
@@ -117,7 +147,7 @@ export class EventoService {
     const filter: any = {
       lat: { $gte: south, $lte: north },
       lng: { $gte: west, $lte: east },
-      schedule: { $gte: now } // Solo eventos futuros
+      schedule: { $gte: now }
     };
 
     const skip = (page - 1) * limit;
@@ -125,7 +155,7 @@ export class EventoService {
     const [total, eventos] = await Promise.all([
       Evento.countDocuments(filter),
       Evento.find(filter)
-        .sort({ schedule: 1 }) // Ordenar por fecha
+        .sort({ schedule: 1 })
         .skip(skip)
         .limit(limit)
         .populate('participantes', 'username gmail')

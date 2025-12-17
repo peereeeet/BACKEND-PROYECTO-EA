@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import {
   createValoracion,
+  getUserValoracion,
   updateValoracion,
   listValoracionesEvento,
   getValoracionById,
   deleteValoracion
 } from '../controller/valoracionController';
+import { authenticateToken } from '../auth/middleware';
+import { validateRatingContent } from '../profanityMiddleware';
 
 const router = Router();
 
@@ -15,6 +18,8 @@ const router = Router();
  *   post:
  *     summary: Crear una valoración para un evento
  *     tags: [Valoraciones]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: eventoId
@@ -39,12 +44,40 @@ const router = Router();
  *         description: Valoración creada correctamente
  *       400:
  *         description: Datos inválidos
- *       404:
- *         description: Evento no encontrado
+ *       401:
+ *         description: Usuario no autenticado
+ *       409:
+ *         description: El usuario ya ha valorado este evento
  *       500:
  *         description: Error del servidor
  */
-router.post('/event/:eventoId', createValoracion);
+router.post('/event/:eventoId', authenticateToken, validateRatingContent, createValoracion);
+
+/**
+ * @swagger
+ * /api/ratings/event/{eventoId}/my-rating:
+ *   get:
+ *     summary: Obtener la valoración del usuario autenticado para un evento
+ *     tags: [Valoraciones]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Valoración del usuario
+ *       401:
+ *         description: Usuario no autenticado
+ *       404:
+ *         description: El usuario no ha valorado este evento
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/event/:eventoId/my-rating', authenticateToken, getUserValoracion);
 
 /**
  * @swagger
@@ -58,17 +91,19 @@ router.post('/event/:eventoId', createValoracion);
  *         required: true
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Buscar en comentarios
  *     responses:
  *       200:
  *         description: Lista de valoraciones del evento
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Valoracion'
- *       404:
- *         description: Evento no encontrado
  *       500:
  *         description: Error del servidor
  */
@@ -89,10 +124,6 @@ router.get('/event/:eventoId', listValoracionesEvento);
  *     responses:
  *       200:
  *         description: Valoración encontrada
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Valoracion'
  *       404:
  *         description: Valoración no encontrada
  *       500:
@@ -106,6 +137,8 @@ router.get('/:id', getValoracionById);
  *   put:
  *     summary: Actualizar una valoración
  *     tags: [Valoraciones]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -135,7 +168,7 @@ router.get('/:id', getValoracionById);
  *       500:
  *         description: Error del servidor
  */
-router.put('/:id', updateValoracion);
+router.put('/:id', authenticateToken, validateRatingContent, updateValoracion);
 
 /**
  * @swagger
@@ -143,6 +176,8 @@ router.put('/:id', updateValoracion);
  *   delete:
  *     summary: Eliminar una valoración
  *     tags: [Valoraciones]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -157,6 +192,6 @@ router.put('/:id', updateValoracion);
  *       500:
  *         description: Error del servidor
  */
-router.delete('/:id', deleteValoracion);
+router.delete('/:id', authenticateToken, deleteValoracion);
 
 export default router;
