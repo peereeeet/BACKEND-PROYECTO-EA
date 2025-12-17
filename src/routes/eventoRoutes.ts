@@ -375,6 +375,30 @@ router.post('/:id/leave', authenticateToken, leaveEvento);
 /**
  * @swagger
  * /api/event/{id}:
+ *   delete:
+ *     summary: Eliminar un evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Evento eliminado correctamente
+ *       404:
+ *         description: Evento no encontrado
+ *       500:
+ *         description: Error del servidor
+ */
+router.delete('/:id', authenticateToken, deleteEventoById);
+
+/**
+ * @swagger
+ * /api/event/{id}:
  *   put:
  *     summary: Actualizar un evento
  *     tags: [Eventos]
@@ -426,8 +450,6 @@ router.put('/:id', authenticateToken, validateEventContent, updateEventoById);
  *       500:
  *         description: Error del servidor
  */
-
-// ==================== RUTAS DE EVENTOS PRIVADOS ====================
 
 /**
  * @swagger
