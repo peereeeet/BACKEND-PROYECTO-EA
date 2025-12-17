@@ -141,7 +141,8 @@ export class EventoService {
     east: number,
     west: number,
     page: number,
-    limit: number
+    limit: number,
+    userId?: string
   ): Promise<{ data: IEvento[]; page: number; totalPages: number; totalItems: number }> {
     const now = new Date();
     const filter: any = {
@@ -149,6 +150,19 @@ export class EventoService {
       lng: { $gte: west, $lte: east },
       schedule: { $gte: now }
     };
+
+    if (userId) {
+      const userObjectId = new Types.ObjectId(userId);
+      filter.$or = [
+        { isPrivate: false },
+        { isPrivate: true, creador: userObjectId },
+        { isPrivate: true, invitados: userObjectId },
+        { isPrivate: true, invitacionesPendientes: userObjectId },
+        { isPrivate: true, participantes: userObjectId }
+      ];
+    } else {
+      filter.isPrivate = false;
+    }
 
     const skip = (page - 1) * limit;
 
@@ -210,11 +224,6 @@ export class EventoService {
     }
   }
 
-  // ==================== MÉTODOS DE EVENTOS PRIVADOS ====================
-
-  /**
-   * Invitar usuarios a un evento privado
-   */
   async inviteUsersToEvent(eventoId: string, userIds: string[]): Promise<IEvento | null> {
     const evento = await Evento.findById(eventoId);
     if (!evento) return null;
@@ -230,9 +239,6 @@ export class EventoService {
      .populate('invitacionesPendientes', 'username gmail');
   }
 
-  /**
-   * Aceptar invitación a un evento privado
-   */
   async acceptInvitation(eventoId: string, userId: string): Promise<IEvento | null> {
     const userObjectId = new Types.ObjectId(userId);
     
@@ -253,9 +259,6 @@ export class EventoService {
     return evento;
   }
 
-  /**
-   * Rechazar invitación a un evento privado
-   */
   async rejectInvitation(eventoId: string, userId: string): Promise<IEvento | null> {
     const userObjectId = new Types.ObjectId(userId);
     
@@ -266,9 +269,6 @@ export class EventoService {
     ).populate('creador', 'username gmail');
   }
 
-  /**
-   * Obtener invitaciones pendientes de un usuario
-   */
   async getPendingInvitations(userId: string): Promise<IEvento[]> {
     const userObjectId = new Types.ObjectId(userId);
     
@@ -281,9 +281,6 @@ export class EventoService {
     .sort({ schedule: 1 });
   }
 
-  /**
-   * Eliminar invitado de un evento privado (solo creador)
-   */
   async removeInvitedUser(eventoId: string, userId: string): Promise<IEvento | null> {
     const userObjectId = new Types.ObjectId(userId);
     
@@ -302,9 +299,6 @@ export class EventoService {
      .populate('participantes', 'username gmail');
   }
 
-  /**
-   * Obtener eventos visibles para un usuario (públicos + privados donde está invitado)
-   */
   async getEventosVisiblesParaUsuario(userId: string): Promise<IEvento[]> {
     const userObjectId = new Types.ObjectId(userId);
     const now = new Date();

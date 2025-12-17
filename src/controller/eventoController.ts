@@ -3,6 +3,7 @@ import { EventoService } from '../services/eventoServices';
 import { Usuario } from '../models/usuario';
 import { Evento } from '../models/evento';
 import { logger } from '../config/logger';
+import { Types } from 'mongoose';
 
 const eventoService = new EventoService();
 
@@ -18,13 +19,13 @@ function normalizeParticipantes(p: any): string[] {
 }
 
 function canModifyEvento(userRol: string, userId: string, creadorId: string): boolean {
-  return userRol === 'admin' || userId === creadorId.toString();
+  return userRol === 'admin' || userId === creadorId;
 }
 
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
     const { name, schedule, address, lat, lng, categoria, isPrivate, invitados } = req.body;
-    const creadorId = (req as any).user?.payload?.id; 
+    const creadorId = (req as any).user?.id; 
 
     if (!creadorId) {
       logger.warn('No autenticado al crear evento');
@@ -123,6 +124,7 @@ export const getEventosByBounds = async (req: Request, res: Response): Promise<v
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
 
+    const userId = (req as any).user?.id;
     const result = await eventoService.getEventosWithinBounds(
       north,
       south,
@@ -223,7 +225,21 @@ export const getUpcomingEventos = async (req: Request, res: Response): Promise<v
     const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
     const skip = (page - 1) * limit;
     const now = new Date();
-    const filter = { schedule: { $gte: now } };
+    const filter: any = { schedule: { $gte: now } };
+
+    const userId = (req as any).user?.id;
+    if (userId) {
+      const userObjectId = new Types.ObjectId(userId);
+      filter.$or = [
+        { isPrivate: false },
+        { isPrivate: true, creador: userObjectId },
+        { isPrivate: true, invitados: userObjectId },
+        { isPrivate: true, invitacionesPendientes: userObjectId },
+        { isPrivate: true, participantes: userObjectId }
+      ];
+    } else {
+      filter.isPrivate = false;
+    }
 
     const [total, eventos] = await Promise.all([
       Evento.countDocuments(filter),
@@ -281,7 +297,8 @@ export async function deleteEventoById(req: Request, res: Response): Promise<Res
       return res.status(404).json({ message: 'EVENTO NO ENCONTRADO' });
     }
 
-    if (!canModifyEvento(userRol, userId, evento.creador.toString())) {
+    const creadorId = (evento.creador as any)?._id ? String((evento.creador as any)._id) : String(evento.creador);
+    if (!canModifyEvento(userRol, userId, creadorId)) {
       logger.warn(`Usuario ${userId} (${userRol}) no tiene permiso para eliminar evento ${id}`);
       return res.status(403).json({ 
         message: 'Solo el creador o un administrador pueden eliminar este evento' 
@@ -324,7 +341,8 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    if (!canModifyEvento(userRol, userId, evento.creador.toString())) {
+    const creadorId = (evento.creador as any)?._id ? String((evento.creador as any)._id) : String(evento.creador);
+    if (!canModifyEvento(userRol, userId, creadorId)) {
       logger.warn(`Usuario ${userId} (${userRol}) no tiene permiso para actualizar evento ${id}`);
       res.status(403).json({ 
         message: 'Solo el creador o un administrador pueden editar este evento' 
@@ -538,6 +556,20 @@ export const searchEventos = async (req: Request, res: Response): Promise<void> 
       }
     }
     
+    
+    const userId = (req as any).user?.id;
+    if (userId) {
+      const userObjectId = new Types.ObjectId(userId);
+      filter.$or = [
+        { isPrivate: false },
+        { isPrivate: true, creador: userObjectId },
+        { isPrivate: true, invitados: userObjectId },
+        { isPrivate: true, invitacionesPendientes: userObjectId },
+        { isPrivate: true, participantes: userObjectId }
+      ];
+    } else {
+      filter.isPrivate = false;
+    }
     const [total, eventos] = await Promise.all([
       Evento.countDocuments(filter),
       Evento.find(filter)
@@ -569,7 +601,7 @@ export async function inviteUsersToPrivateEvent(req: Request, res: Response): Pr
   try {
     const { id: eventoId } = req.params;
     const { userIds } = req.body;
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
@@ -588,7 +620,8 @@ export async function inviteUsersToPrivateEvent(req: Request, res: Response): Pr
       return res.status(400).json({ message: 'El evento no es privado' });
     }
 
-    if (evento.creador.toString() !== userId.toString()) {
+    const creadorIdInvite = (evento.creador as any)?._id ? String((evento.creador as any)._id) : String(evento.creador);
+    if (creadorIdInvite !== userId.toString()) {
       return res.status(403).json({ message: 'Solo el creador puede invitar usuarios' });
     }
 
@@ -607,7 +640,7 @@ export async function inviteUsersToPrivateEvent(req: Request, res: Response): Pr
 export async function acceptPrivateEventInvitation(req: Request, res: Response): Promise<Response> {
   try {
     const { id: eventoId } = req.params;
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
@@ -643,7 +676,7 @@ export async function acceptPrivateEventInvitation(req: Request, res: Response):
 export async function rejectPrivateEventInvitation(req: Request, res: Response): Promise<Response> {
   try {
     const { id: eventoId } = req.params;
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
@@ -673,7 +706,7 @@ export async function rejectPrivateEventInvitation(req: Request, res: Response):
 
 export async function getMyPendingInvitations(req: Request, res: Response): Promise<Response> {
   try {
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
@@ -694,7 +727,7 @@ export async function getMyPendingInvitations(req: Request, res: Response): Prom
 export async function removeInvitedUserFromEvent(req: Request, res: Response): Promise<Response> {
   try {
     const { id: eventoId, userId: targetUserId } = req.params;
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
@@ -705,7 +738,8 @@ export async function removeInvitedUserFromEvent(req: Request, res: Response): P
       return res.status(404).json({ message: 'Evento no encontrado' });
     }
 
-    if (evento.creador.toString() !== userId.toString()) {
+    const creadorIdRemove = (evento.creador as any)?._id ? String((evento.creador as any)._id) : String(evento.creador);
+    if (creadorIdRemove !== userId.toString()) {
       return res.status(403).json({ message: 'Solo el creador puede eliminar invitados' });
     }
 
@@ -728,7 +762,7 @@ export async function removeInvitedUserFromEvent(req: Request, res: Response): P
 
 export async function getEventosVisibles(req: Request, res: Response): Promise<Response> {
   try {
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
