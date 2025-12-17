@@ -32,7 +32,9 @@ import {
   postHeartbeat,
   loginWithGoogle 
 } from '../controller/usuarioController';
+import { validateUserContent, validateMessageContent } from '../profanityMiddleware';
 import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
+import { registerValidation, updateProfileValidation } from '../userValidators';
 
 const router = Router();
 
@@ -102,7 +104,7 @@ router.get('/', getAllUsers);
  *       400:
  *         description: Error en los datos del usuario
  */
-router.post('/', createUser);
+router.post('/', registerValidation, validateUserContent, createUser);
 
 /**
  * @swagger
@@ -180,7 +182,7 @@ router.get('/:id', getUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.put('/:id', authenticateadminToken, updateUserById);
+router.put('/:id', authenticateadminToken, validateUserContent, updateUserById);
 
 /**
  * @swagger
@@ -213,7 +215,7 @@ router.put('/:id', authenticateadminToken, updateUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.put('/:id/self', authenticateOwner, updateOwnProfile);
+router.put('/:id/self', authenticateOwner, validateUserContent, updateOwnProfile);
 
 /**
  * @swagger
@@ -428,7 +430,7 @@ router.post('/auth/create-admin', createAdminUser);
  *     '500':
  *       description: Error del servidor
  */
-router.patch('/:id/disable',authenticateadminToken, disableUser);
+router.patch('/:id/disable', authenticateadminToken, disableUser);
 
 /**
  * @swagger
@@ -827,7 +829,7 @@ router.get('/:userId/chat/:friendId', getChatBetween);
  *       500:
  *         description: Error del servidor
  */
-router.post('/:userId/chat/:friendId', postChatMessage);
+router.post('/:userId/chat/:friendId', validateMessageContent, postChatMessage);
 
 /**
  * @swagger
@@ -884,6 +886,6 @@ router.get('/events/:eventId/chat', getEventChatForEvent);
  *       500:
  *         description: Error del servidor
  */
-router.post('/events/:eventId/chat', postEventChatMessage);
+router.post('/events/:eventId/chat', validateMessageContent, postEventChatMessage);
 
 export default router;

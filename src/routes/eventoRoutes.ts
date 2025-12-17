@@ -21,6 +21,7 @@ import {
   getEventosVisibles
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
+import { validateEventContent } from '../profanityMiddleware';
 
 const router = Router();
 
@@ -247,7 +248,7 @@ router.get('/:id', getEventoById);
  *       500:
  *         description: Error del servidor
  */
-router.post('/', authenticateToken, createEvento); 
+router.post('/', authenticateToken, validateEventContent, createEvento); 
 
 /**
  * @swagger
@@ -401,7 +402,7 @@ router.post('/:id/leave', authenticateToken, leaveEvento);
  *       500:
  *         description: Error del servidor
  */
-router.put('/:id', authenticateToken, updateEventoById);
+router.put('/:id', authenticateToken, validateEventContent, updateEventoById);
 
 /**
  * @swagger

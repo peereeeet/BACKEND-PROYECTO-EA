@@ -62,12 +62,10 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       }
     }
 
-    // Procesar invitados para eventos privados
     let invitadosIds: string[] = [];
     let invitacionesPendientesIds: string[] = [];
 
     if (isPrivate && Array.isArray(invitados) && invitados.length > 0) {
-      // Los invitados van a invitacionesPendientes hasta que acepten
       invitacionesPendientesIds = invitados.map((id: string) => id.toString());
     }
 
@@ -269,8 +267,8 @@ export async function getEventoById(req: Request, res: Response): Promise<Respon
 export async function deleteEventoById(req: Request, res: Response): Promise<Response> {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.payload?.id;
-    const userRol = (req as any).user?.payload?.rol;
+    const userId = (req as any).user?.id;
+    const userRol = (req as any).user?.rol;
 
     if (!userId) {
       logger.warn('No autenticado al eliminar evento');
@@ -310,8 +308,8 @@ export async function deleteEventoById(req: Request, res: Response): Promise<Res
 export const updateEventoById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.payload?.id;
-    const userRol = (req as any).user?.payload?.rol;
+    const userId = (req as any).user?.id;
+    const userRol = (req as any).user?.rol;
 
     if (!userId) {
       logger.warn('No autenticado al actualizar evento');
@@ -362,7 +360,7 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
 export const joinEvento = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       logger.warn('No autenticado al unirse al evento');
@@ -398,7 +396,7 @@ export const joinEvento = async (req: Request, res: Response): Promise<void> => 
 export const leaveEvento = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       logger.warn('No autenticado al salir del evento');  
@@ -433,7 +431,7 @@ export const leaveEvento = async (req: Request, res: Response): Promise<void> =>
 
 export const getMisEventos = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).user?.payload?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       logger.warn('No autenticado al obtener mis eventos');
@@ -567,11 +565,6 @@ export const searchEventos = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// ==================== CONTROLADORES DE EVENTOS PRIVADOS ====================
-
-/**
- * Invitar usuarios a un evento privado (solo creador)
- */
 export async function inviteUsersToPrivateEvent(req: Request, res: Response): Promise<Response> {
   try {
     const { id: eventoId } = req.params;
@@ -611,9 +604,6 @@ export async function inviteUsersToPrivateEvent(req: Request, res: Response): Pr
   }
 }
 
-/**
- * Aceptar invitación a un evento privado
- */
 export async function acceptPrivateEventInvitation(req: Request, res: Response): Promise<Response> {
   try {
     const { id: eventoId } = req.params;
@@ -635,7 +625,6 @@ export async function acceptPrivateEventInvitation(req: Request, res: Response):
 
     const eventoActualizado = await eventoService.acceptInvitation(eventoId, userId);
     
-    // Actualizar también el array de eventos del usuario
     await Usuario.findByIdAndUpdate(
       userId,
       { $addToSet: { eventos: eventoId } }
@@ -651,9 +640,6 @@ export async function acceptPrivateEventInvitation(req: Request, res: Response):
   }
 }
 
-/**
- * Rechazar invitación a un evento privado
- */
 export async function rejectPrivateEventInvitation(req: Request, res: Response): Promise<Response> {
   try {
     const { id: eventoId } = req.params;
@@ -685,9 +671,6 @@ export async function rejectPrivateEventInvitation(req: Request, res: Response):
   }
 }
 
-/**
- * Obtener invitaciones pendientes del usuario autenticado
- */
 export async function getMyPendingInvitations(req: Request, res: Response): Promise<Response> {
   try {
     const userId = (req as any).user?.payload?.id;
@@ -708,9 +691,6 @@ export async function getMyPendingInvitations(req: Request, res: Response): Prom
   }
 }
 
-/**
- * Eliminar invitado de un evento privado (solo creador)
- */
 export async function removeInvitedUserFromEvent(req: Request, res: Response): Promise<Response> {
   try {
     const { id: eventoId, userId: targetUserId } = req.params;
@@ -731,7 +711,6 @@ export async function removeInvitedUserFromEvent(req: Request, res: Response): P
 
     const eventoActualizado = await eventoService.removeInvitedUser(eventoId, targetUserId);
     
-    // Actualizar también el array de eventos del usuario eliminado
     await Usuario.findByIdAndUpdate(
       targetUserId,
       { $pull: { eventos: eventoId } }
@@ -747,9 +726,6 @@ export async function removeInvitedUserFromEvent(req: Request, res: Response): P
   }
 }
 
-/**
- * Obtener eventos visibles para el usuario (públicos + privados donde está invitado)
- */
 export async function getEventosVisibles(req: Request, res: Response): Promise<Response> {
   try {
     const userId = (req as any).user?.payload?.id;
