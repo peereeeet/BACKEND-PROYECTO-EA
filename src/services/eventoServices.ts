@@ -338,7 +338,7 @@ export class EventoService {
       ]
     })
     .populate('creador', 'username gmail')
-    .populate('participantes', 'username gmail') // Frontend can check if user is in this list to highlight
+    .populate('participantes', 'username gmail')
     .sort({ schedule: 1 });
   }
 }
