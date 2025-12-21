@@ -793,7 +793,6 @@ export async function getCalendarEvents(req: Request, res: Response): Promise<Re
       return res.status(400).json({ message: 'Se requieren parámetros dateFrom y dateTo' });
     }
 
-    // Asegurar que son fechas válidas
     const start = new Date(dateFrom as string);
     const end = new Date(dateTo as string);
 
