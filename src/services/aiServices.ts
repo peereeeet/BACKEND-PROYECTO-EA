@@ -10,91 +10,66 @@ export class AiServices {
     });
   }
 
-  async generateMongoQuery(userPrompt: string, userId?: string): Promise<any> {
-    logger.info(`AI Service: Generando query de Mongo para prompt: "${userPrompt}" usuario: ${userId}`);
-    const today = new Date().toISOString();
+  async askWithContext(userPrompt: string, events: any[], userId?: string): Promise<{ answer: string; relatedEventIds: string[] }> {
+    logger.info(`AI Service: Preguntando con contexto de ${events.length} eventos para usuario: ${userId}`);
     
-    // Llista de categories extreta del teu model evento.ts per ajudar a l'IA
-    const categories = [
-      'Fútbol', 'Baloncesto', 'Tenis', 'Pádel', 'Running', 'Ciclismo', 
-      'Natación', 'Yoga', 'Gimnasio', 'Senderismo', 'Escalada', 'Artes Marciales',
-      'Concierto Rock', 'Concierto Pop', 'Concierto Clásica', 'Jazz', 'Electrónica', 
-      'Hip Hop', 'Karaoke', 'Discoteca', 'Festival Musical',
-      'Exposición Arte', 'Teatro', 'Cine', 'Museo', 'Literatura', 'Fotografía', 
-      'Pintura', 'Escultura', 'Danza', 'Ópera', 'Restaurante', 'Tapas', 
-      'Cocina Internacional', 'Vinos', 'Cerveza Artesanal', 'Repostería', 'Brunch', 
-      'Food Truck', 'Fiesta Privada', 'Fiesta Temática', 'Cumpleaños', 'Boda', 
-      'Despedida', 'After Work', 'Networking', 'Speed Dating', 'Taller', 'Curso', 
-      'Conferencia', 'Seminario', 'Workshop', 'Idiomas', 'Masterclass', 'Hackathon', 
-      'Meetup Tech', 'Gaming', 'eSports', 'Programación', 'Inteligencia Artificial', 
-      'Blockchain', 'Startups', 'Meditación', 'Spa', 'Wellness', 'Mindfulness', 
-      'Salud Mental', 'Voluntariado Ambiental', 'Voluntariado Social', 
-      'Donación de Sangre', 'Rescate Animal', 'Limpieza Playas', 
-      'Banco de Alimentos', 'Camping', 'Montañismo', 'Playa', 'Barbacoa', 'Picnic', 
-      'Observación Aves', 'Safari', 'Juegos de Mesa', 'Ajedrez', 'Poker', 
-      'Escape Room', 'Paintball', 'Laser Tag', 'Bolos', 'Evento Familiar', 
-      'Parque Infantil', 'Teatro Infantil', 'Animación Infantil', 'Taller Niños', 
-      'Mercadillo', 'Feria', 'Turismo', 'Excursión', 'Compras', 'Otros'
-    ];
+    // Simplificamos los datos para la IA e incluimos si el usuario ya participa
+    const eventsContext = JSON.stringify(events.map(e => ({
+      id: e._id.toString(),
+      name: e.name,
+      categoria: e.categoria,
+      address: e.address,
+      schedule: e.schedule,
+      participantesCount: e.participantes?.length || 0,
+      isUserParticipating: userId ? e.participantes?.some((p: any) => p._id ? p._id.toString() === userId : p.toString() === userId) : false
+    })), null, 2);
 
     const systemPrompt = `
-      Eres un asistente que traduce peticiones de usuarios en lenguaje natural a consultas de búsqueda de MongoDB (formato JSON).
+      Eres un asistente experto en eventos. El usuario te hará preguntas sobre los eventos disponibles.
+      Te proporcionaré una lista de eventos en formato JSON.
       
-      Datos actuales:
-      - Fecha de hoy (ISO): ${today}
-
-      Esquema de la colección 'Evento':
-      - name (String): Título del evento (usa $regex con opciones 'i' para búsquedas parciales).
-      - categoria (String): Debe ser EXACTAMENTE una de estas: ${categories.join(', ')}. Si el usuario dice "música", busca categorías relacionadas con música usando un $in.
-      - address (String): Ubicación (usa $regex para ciudades).
-      - schedule (Date): Fecha del evento. Usa operadores $gte, $lte para rangos de fechas (hoy, mañana, fin de semana).
-      - participantes (ObjectId[]): Lista de usuarios inscritos.
-
       Instrucciones:
-      1. Retorna SOLAMENTE un objeto JSON válido que se pueda pasar directamente a model.find().
-      2. No incluyas explicaciones, ni markdown, solo el JSON.
-      3. Si el usuario pide algo de lo que no tienes información, intenta hacer la mejor aproximación con $regex en el campo 'name' o 'categoria'.
-      4. Si el usuario pide explícitamente eventos a los que NO está apuntado (ej: "eventos nuevos", "que no tenga", "libres"), añade al filtro: { "participantes": { "$ne": "CURRENT_USER_ID" } }.
-      5. Si el usuario pide eventos a los que SÍ está apuntado, usa: { "participantes": "CURRENT_USER_ID" }.
+      1. Usa SOLAMENTE la información proporcionada para responder.
+      2. Si el usuario ya está apuntado a un evento (isUserParticipating: true), tenlo en cuenta en tu respuesta.
+      3. Responde SIEMPRE en formato JSON con la siguiente estructura:
+         {
+           "answer": "Tu respuesta amable y concisa aquí",
+           "relatedEventIds": ["id1", "id2"] // Los IDs de los eventos que son relevantes para la respuesta
+         }
+      4. No incluyas markdown (como \`\`\`json) en tu respuesta, solo el objeto JSON puro.
+
+      Eventos actuales:
+      ${eventsContext}
     `;
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0,
+        temperature: 0.7,
       });
-      logger.info('AI Service: Respuesta recibida de OpenAI');
 
-      const content = response.choices[0].message?.content;
-      if (!content) return {};
-
-      let cleanedContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      // Reemplazar el placeholder por el ID real si existe
-      if (userId) {
-        cleanedContent = cleanedContent.replace(/CURRENT_USER_ID/g, userId);
-      } else {
-        // Si no hay userId, eliminamos el filtro de participantes para evitar errores, o lo dejamos fallar?
-        // Mejor eliminar la parte de "participantes": ... si no hay user ID, pero es complejo parsear string.
-        // Asumiremos que si la IA lo pone es pq lo pidió el usuario. Si no hay ID, quizas deberiamos avisar.
-        // Simplemente lo reemplazamos por algo que no rompa o null, pero Mongo fallaría con ObjectId invalido.
-        // Dejaremos el string y si falla, falla. O mejor, si no hay ID, intentamos limpiarlo.
-        if (cleanedContent.includes('CURRENT_USER_ID')) {
-           console.warn('AI Service: Se solicitó filtro por usuario pero no se proporcionó userId');
-           // Podríamos eliminar la linea, pero es arriesgado con regex simple.
-        }
+      const content = response.choices[0].message?.content || "";
+      try {
+        // Limpiamos posibles bloques de markdown si la IA los pone por error
+        const cleanedContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanedContent);
+      } catch (e) {
+        logger.error(`Error parseando respuesta JSON de IA: ${content}`);
+        return { 
+          answer: content, 
+          relatedEventIds: [] 
+        };
       }
-
-      logger.info(`AI Query generada: ${cleanedContent}`);
-      return JSON.parse(cleanedContent);
-
     } catch (error) {
-      logger.error(`Error generant query amb IA: ${error}`);
-      return {}; 
+      logger.error(`Error en askWithContext: ${error}`);
+      return { 
+        answer: "Error al processar la resposta amb IA.", 
+        relatedEventIds: [] 
+      };
     }
   }
 }

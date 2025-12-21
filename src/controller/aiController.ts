@@ -15,16 +15,21 @@ export async function searchEventsWithAi(req: Request, res: Response) {
       return res.status(400).json({ message: 'La consulta (query) és obligatòria.' });
     }
 
-    const mongoFilter = await aiService.generateMongoQuery(query, userId);
+    // Obtenim TOTS els esdeveniments per enviar-los com a context a ChatGPT
+    const events = await eventoService.getAllEventos();
+    
+    // Passem la query, els esdeveniments i el userId (si existeix) a la IA
+    const aiResult = await aiService.askWithContext(query, events, userId);
 
-
-    const events = await eventoService.getEventosByAiFilter(mongoFilter);
+    // Filtrem els esdeveniments per retornar només els que la IA considera rellevants
+    const relatedEvents = events.filter(e => 
+      aiResult.relatedEventIds.includes(e._id.toString())
+    );
 
     return res.status(200).json({
-      originalQuery: query,
-      interpretedFilter: mongoFilter,
-      count: events.length,
-      data: events
+      answer: aiResult.answer,
+      count: relatedEvents.length,
+      data: relatedEvents 
     });
 
   } catch (error) {
