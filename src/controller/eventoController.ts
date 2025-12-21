@@ -779,3 +779,33 @@ export async function getEventosVisibles(req: Request, res: Response): Promise<R
     return res.status(500).json({ message: 'Error obteniendo eventos visibles', error: (error as Error).message });
   }
 }
+
+export async function getCalendarEvents(req: Request, res: Response): Promise<Response> {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const { dateFrom, dateTo } = req.query;
+
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ message: 'Se requieren parámetros dateFrom y dateTo' });
+    }
+
+    // Asegurar que son fechas válidas
+    const start = new Date(dateFrom as string);
+    const end = new Date(dateTo as string);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: 'Fechas inválidas' });
+    }
+    
+    const eventos = await eventoService.getCalendarEvents(userId, start, end);
+
+    return res.status(200).json(eventos);
+  } catch (error) {
+    logger.error(`Error obteniendo eventos de calendario: ${error}`);
+    return res.status(500).json({ message: 'Error obteniendo eventos de calendario', error: (error as Error).message });
+  }
+}
