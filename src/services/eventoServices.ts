@@ -317,4 +317,28 @@ export class EventoService {
     .populate('participantes', 'username gmail')
     .sort({ schedule: 1 });
   }
+
+  async getCalendarEvents(userId: string, dateFrom: Date, dateTo: Date): Promise<IEvento[]> {
+    const userObjectId = new Types.ObjectId(userId);
+
+    return await Evento.find({
+      $and: [
+        {
+          $or: [
+            { isPrivate: false },
+            { creador: userObjectId },
+            { invitados: userObjectId },
+            { invitacionesPendientes: userObjectId },
+            { participantes: userObjectId }
+          ]
+        },
+        {
+          schedule: { $gte: dateFrom, $lte: dateTo }
+        }
+      ]
+    })
+    .populate('creador', 'username gmail')
+    .populate('participantes', 'username gmail') // Frontend can check if user is in this list to highlight
+    .sort({ schedule: 1 });
+  }
 }
