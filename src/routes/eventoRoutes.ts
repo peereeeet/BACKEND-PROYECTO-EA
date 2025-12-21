@@ -18,7 +18,8 @@ import {
   rejectPrivateEventInvitation,
   getMyPendingInvitations,
   removeInvitedUserFromEvent,
-  getEventosVisibles
+  getEventosVisibles,
+  getCalendarEvents
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 import { validateEventContent } from '../profanityMiddleware';
@@ -182,6 +183,37 @@ router.get('/user/my-events', authenticateToken, getMisEventos);
  *         description: Error del servidor
  */
 router.get('/', getAllEventos);
+
+/**
+ * @swagger
+ * /api/event/calendar:
+ *   get:
+ *     summary: Obtener eventos para vista de calendario (rango de fechas)
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: dateTo
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *     responses:
+ *       200:
+ *         description: Lista de eventos en el rango
+ *       400:
+ *         description: Parámetros faltantes o inválidos
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/calendar', authenticateToken, getCalendarEvents);
 
 /**
  * @swagger
@@ -594,5 +626,35 @@ router.delete('/:id/remove-invite/:userId', authenticateToken, removeInvitedUser
  *         description: No autenticado
  */
 router.get('/visible', authenticateToken, getEventosVisibles);
+
+/**
+ * @swagger
+ * /api/event/calendar:
+ *   get:
+ *     summary: Obtener eventos para vista de calendario (rango de fechas)
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: dateTo
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *     responses:
+ *       200:
+ *         description: Lista de eventos en el rango
+ *       400:
+ *         description: Parámetros faltantes o inválidos
+ *       401:
+ *         description: No autenticado
+ */
 
 export default router;
