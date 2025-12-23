@@ -9,7 +9,9 @@ import {
   checkEventNameExists,
   deleteEventoById,
   joinEvento,      
-  leaveEvento,    
+  leaveEvento,  
+  leaveWaitlist,
+  getWaitlistPosition,   
   getMisEventos,
   getEventosByBounds,
   searchEventos,
@@ -403,6 +405,54 @@ router.post('/:id/join', authenticateToken, joinEvento);
  *         description: Error del servidor
  */
 router.post('/:id/leave', authenticateToken, leaveEvento);
+
+/**
+ * @swagger
+ * /api/event/{id}/waitlist:
+ *   delete:
+ *     summary: Salir de la lista de espera
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Usuario eliminado de la lista de espera
+ *       401:
+ *         description: No autenticado
+ *       404:
+ *         description: Evento no encontrado
+ */
+router.delete('/:id/waitlist', authenticateToken, leaveWaitlist);
+
+/**
+ * @swagger
+ * /api/event/{id}/waitlist/position:
+ *   get:
+ *     summary: Obtener posición en lista de espera
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Posición del usuario en la lista
+ *       401:
+ *         description: No autenticado
+ *       404:
+ *         description: Evento no encontrado
+ */
+router.get('/:id/waitlist/position', authenticateToken, getWaitlistPosition);
 
 /**
  * @swagger
