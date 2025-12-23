@@ -15,6 +15,8 @@ export interface IEvento {
   isPrivate: boolean;
   invitados: Types.ObjectId[];
   invitacionesPendientes: Types.ObjectId[];
+  maxParticipantes?: number | null;
+  listaEspera: Types.ObjectId[];
 }
 
 const eventoSchema = new Schema<IEvento>({
@@ -56,7 +58,9 @@ const eventoSchema = new Schema<IEvento>({
   ratingsCount: { type: Number, default: 0 },
   isPrivate: { type: Boolean, default: false },
   invitados: [{ type: Schema.Types.ObjectId, ref: 'Usuario', default: [] }],
-  invitacionesPendientes: [{ type: Schema.Types.ObjectId, ref: 'Usuario', default: [] }]
+  invitacionesPendientes: [{ type: Schema.Types.ObjectId, ref: 'Usuario', default: [] }],
+  maxParticipantes: { type: Number, default: null },
+  listaEspera: [{ type: Schema.Types.ObjectId, ref: 'Usuario', default: [] }]
 }, { timestamps: false, versionKey: false });
 
 export const Evento = model<IEvento>('Evento', eventoSchema);
