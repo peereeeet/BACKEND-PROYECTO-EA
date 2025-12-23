@@ -25,6 +25,13 @@ export class EventoService {
       if (!Number.isNaN(lngNum as number)) payload.lng = lngNum as number;
     }
 
+    if (data.maxParticipantes !== undefined) {
+      const maxNum = typeof data.maxParticipantes === 'string' 
+        ? parseInt(data.maxParticipantes, 10) 
+        : data.maxParticipantes;
+      payload.maxParticipantes = (maxNum && maxNum > 0) ? maxNum : undefined;
+    }
+
     const e = new Evento(payload);
     const evento = await e.save();
 
@@ -47,6 +54,8 @@ export class EventoService {
     schedule?: string | Date | null;
     participantes?: string[];
     creador: string;
+    categoria?: string;
+    maxParticipantes?: number | string | null;
   }) {
     const uniqueIds = new Set<string>([
       input.creador,
@@ -64,6 +73,10 @@ export class EventoService {
       participantes,
     };
 
+    if (input.categoria) {
+      payload.categoria = input.categoria;
+    }
+
     if (input.schedule) {
       const d = new Date(input.schedule as any);
       payload.schedule = isNaN(d.getTime()) ? null : d;
@@ -77,6 +90,13 @@ export class EventoService {
     if (input.lng !== undefined && input.lng !== null && input.lng !== '') {
       const lngNum = typeof input.lng === 'string' ? parseFloat(input.lng) : input.lng;
       if (!Number.isNaN(lngNum as number)) payload.lng = lngNum;
+    }
+
+    if (input.maxParticipantes !== undefined && input.maxParticipantes !== null) {
+      const maxNum = typeof input.maxParticipantes === 'string' 
+        ? parseInt(input.maxParticipantes, 10) 
+        : input.maxParticipantes;
+      payload.maxParticipantes = (maxNum && maxNum > 0) ? maxNum : undefined;
     }
 
     const created = await Evento.create(payload);
@@ -105,14 +125,72 @@ export class EventoService {
     return await Evento.findByIdAndDelete(id);
   }
 
-  async joinEvento(eventoId: string, userId: string): Promise<IEvento | null> {
-    const evento = await Evento.findByIdAndUpdate(
+  async joinEvento(eventoId: string, userId: string): Promise<{ 
+    evento: IEvento | null; 
+    enListaEspera: boolean;
+    mensaje: string;
+  }> {
+    const evento = await Evento.findById(eventoId);
+    
+    if (!evento) {
+      throw new Error('Evento no encontrado');
+    }
+
+    const yaParticipa = evento.participantes.some(
+      (p) => p.toString() === userId
+    );
+
+    if (yaParticipa) {
+      const eventoPopulado = await evento.populate('creador', 'username gmail');
+      return {
+        evento: eventoPopulado,
+        enListaEspera: false,
+        mensaje: 'Ya estás inscrito en este evento'
+      };
+    }
+
+    const yaEnListaEspera = evento.listaEspera.some(
+      (p) => p.toString() === userId
+    );
+
+    if (yaEnListaEspera) {
+      const eventoPopulado = await evento.populate('creador', 'username gmail');
+      return {
+        evento: eventoPopulado,
+        enListaEspera: true,
+        mensaje: 'Ya estás en la lista de espera'
+      };
+    }
+
+    if (evento.maxParticipantes && evento.participantes.length >= evento.maxParticipantes) {
+      const eventoActualizado = await Evento.findByIdAndUpdate(
+        eventoId,
+        { $addToSet: { listaEspera: userId } },
+        { new: true }
+      )
+        .populate('creador', 'username gmail')
+        .populate('participantes', 'username gmail')
+        .populate('listaEspera', 'username gmail');
+
+      logger.info(`Usuario ${userId} añadido a lista de espera del evento ${eventoId}`);
+
+      return {
+        evento: eventoActualizado,
+        enListaEspera: true,
+        mensaje: `Evento completo (${evento.participantes.length}/${evento.maxParticipantes}). Has sido añadido a la lista de espera.`
+      };
+    }
+
+    const eventoActualizado = await Evento.findByIdAndUpdate(
       eventoId,
       { $addToSet: { participantes: userId } },
       { new: true }
-    ).populate('creador', 'username gmail');
+    )
+      .populate('creador', 'username gmail')
+      .populate('participantes', 'username gmail')
+      .populate('listaEspera', 'username gmail');
 
-    if (evento) {
+    if (eventoActualizado) {
       try {
         await gamificacionService.otorgarPuntos(userId, 'unirseEvento');
       } catch (err) {
@@ -120,15 +198,97 @@ export class EventoService {
       }
     }
 
-    return evento;
+    return {
+      evento: eventoActualizado,
+      enListaEspera: false,
+      mensaje: 'Te has unido al evento correctamente'
+    };
   }
 
-  async leaveEvento(eventoId: string, userId: string): Promise<IEvento | null> {
-    return await Evento.findByIdAndUpdate(
+  async leaveEvento(eventoId: string, userId: string, io?: any): Promise<IEvento | null> {
+    const evento = await Evento.findById(eventoId);
+    
+    if (!evento) {
+      throw new Error('Evento no encontrado');
+    }
+
+    const eventoActualizado = await Evento.findByIdAndUpdate(
       eventoId,
       { $pull: { participantes: userId } },
       { new: true }
-    ).populate('creador', 'username gmail');
+    )
+      .populate('creador', 'username gmail')
+      .populate('participantes', 'username gmail')
+      .populate('listaEspera', 'username gmail');
+
+    if (!eventoActualizado) return null;
+
+    await this.procesarListaEspera(eventoActualizado, io);
+
+    return eventoActualizado;
+  }
+
+  async procesarListaEspera(evento: IEvento, io?: any): Promise<void> {
+    if (!evento.maxParticipantes) return;
+    if (evento.participantes.length >= evento.maxParticipantes) return;
+    if (evento.listaEspera.length === 0) return;
+
+    const siguienteUserId = evento.listaEspera[0];
+
+    logger.info(`Procesando lista de espera. Moviendo usuario ${siguienteUserId} a participantes`);
+
+    const eventoActualizado = await Evento.findByIdAndUpdate(
+      evento._id,
+      {
+        $pull: { listaEspera: siguienteUserId },
+        $addToSet: { participantes: siguienteUserId }
+      },
+      { new: true }
+    )
+      .populate('creador', 'username gmail')
+      .populate('participantes', 'username gmail')
+      .populate('listaEspera', 'username gmail');
+
+    if (eventoActualizado) {
+      try {
+        await gamificacionService.otorgarPuntos(siguienteUserId.toString(), 'unirseEvento');
+      } catch (err) {
+        logger.error(`Error al otorgar puntos: ${err}`);
+      }
+
+      if (io) {
+        io.to(`user:${siguienteUserId}`).emit('evento:plazaDisponible', {
+          eventoId: evento._id.toString(),
+          eventoName: evento.name,
+          mensaje: `¡Buenas noticias! Ahora puedes participar en "${evento.name}"`
+        });
+      }
+
+      logger.info(`Usuario ${siguienteUserId} movido de lista de espera a participantes`);
+    }
+  }
+
+  async leaveWaitlist(eventoId: string, userId: string): Promise<IEvento | null> {
+    return await Evento.findByIdAndUpdate(
+      eventoId,
+      { $pull: { listaEspera: userId } },
+      { new: true }
+    )
+      .populate('creador', 'username gmail')
+      .populate('participantes', 'username gmail')
+      .populate('listaEspera', 'username gmail');
+  }
+
+  async getWaitlistPosition(eventoId: string, userId: string): Promise<number> {
+    const evento = await Evento.findById(eventoId);
+    
+    if (!evento) return -1;
+
+    const position = evento.listaEspera.findIndex(
+      (id) => id.toString() === userId
+    );
+
+    return position + 1;
   }
 
   async getEventosByCreador(creadorId: string): Promise<IEvento[]> {
@@ -239,10 +399,43 @@ export class EventoService {
      .populate('invitacionesPendientes', 'username gmail');
   }
 
-  async acceptInvitation(eventoId: string, userId: string): Promise<IEvento | null> {
+  async acceptInvitation(eventoId: string, userId: string): Promise<{
+    evento: IEvento | null;
+    enListaEspera: boolean;
+    mensaje: string;
+  }> {
     const userObjectId = new Types.ObjectId(userId);
     
-    const evento = await Evento.findByIdAndUpdate(
+    const evento = await Evento.findById(eventoId);
+    if (!evento) {
+      throw new Error('Evento no encontrado');
+    }
+
+    if (evento.maxParticipantes && evento.participantes.length >= evento.maxParticipantes) {
+      const eventoActualizado = await Evento.findByIdAndUpdate(
+        eventoId,
+        {
+          $pull: { invitacionesPendientes: userObjectId },
+          $addToSet: { 
+            invitados: userObjectId,
+            listaEspera: userObjectId
+          }
+        },
+        { new: true }
+      )
+        .populate('creador', 'username gmail')
+        .populate('invitados', 'username gmail')
+        .populate('participantes', 'username gmail')
+        .populate('listaEspera', 'username gmail');
+
+      return {
+        evento: eventoActualizado,
+        enListaEspera: true,
+        mensaje: `Evento completo. Has sido añadido a la lista de espera.`
+      };
+    }
+
+    const eventoActualizado = await Evento.findByIdAndUpdate(
       eventoId,
       {
         $pull: { invitacionesPendientes: userObjectId },
@@ -252,11 +445,17 @@ export class EventoService {
         }
       },
       { new: true }
-    ).populate('creador', 'username gmail')
-     .populate('invitados', 'username gmail')
-     .populate('participantes', 'username gmail');
+    )
+      .populate('creador', 'username gmail')
+      .populate('invitados', 'username gmail')
+      .populate('participantes', 'username gmail')
+      .populate('listaEspera', 'username gmail');
 
-    return evento;
+    return {
+      evento: eventoActualizado,
+      enListaEspera: false,
+      mensaje: 'Invitación aceptada correctamente'
+    };
   }
 
   async rejectInvitation(eventoId: string, userId: string): Promise<IEvento | null> {

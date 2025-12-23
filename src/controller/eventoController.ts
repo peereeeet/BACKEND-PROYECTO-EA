@@ -26,7 +26,7 @@ function canModifyEvento(userRol: string, userId: string, creadorId: string): bo
 
 export async function createEvento(req: Request, res: Response): Promise<Response> {
   try {
-    const { name, schedule, address, lat, lng, categoria, isPrivate, invitados } = req.body;
+    const { name, schedule, address, lat, lng, categoria, isPrivate, invitados, maxParticipantes } = req.body;
     const creadorId = (req as any).user?.id; 
 
     if (!creadorId) {
@@ -72,6 +72,15 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       invitacionesPendientesIds = invitados.map((id: string) => id.toString());
     }
 
+    // Procesar maxParticipantes
+    let maxParticipantesNum: number | null = null;
+    if (maxParticipantes !== undefined && maxParticipantes !== null && maxParticipantes !== '') {
+      const parsed = parseInt(String(maxParticipantes), 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        maxParticipantesNum = parsed;
+      }
+    }
+
     const created = await eventoService.createEvento({
       name,
       schedule: new Date(scheduleStr) as any,
@@ -83,7 +92,8 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       creador: creadorId,
       isPrivate: isPrivate || false,
       invitados: invitadosIds as any,
-      invitacionesPendientes: invitacionesPendientesIds as any
+      invitacionesPendientes: invitacionesPendientesIds as any,
+      maxParticipantes: maxParticipantesNum
     });
 
     if (allParticipantesIds.length > 0) {
@@ -100,7 +110,7 @@ export async function createEvento(req: Request, res: Response): Promise<Respons
       .populate('invitacionesPendientes', 'username gmail')
       .exec();
     
-    logger.info(`Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, invitados: ${invitacionesPendientesIds.length}`);
+    logger.info(`Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, maxParticipantes: ${maxParticipantesNum}`);
     
     return res.status(201).json(populated ?? created);
   } catch (error) {
@@ -377,75 +387,105 @@ export const updateEventoById = async (req: Request, res: Response): Promise<voi
   }
 };
 
-export const joinEvento = async (req: Request, res: Response): Promise<void> => {
+export const joinEvento = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const userId = (req as any).user?.id;
 
     if (!userId) {
-      logger.warn('No autenticado al unirse al evento');
-      res.status(401).json({ message: 'No autenticado' });
-      return;
+      return res.status(401).json({ message: 'No autenticado' });
     }
 
-    const evento = await Evento.findById(id);
-    if (!evento) {
-      logger.warn(`Evento no encontrado para unirse con ID: ${id}`);
-      res.status(404).json({ message: 'Evento no encontrado' });
-      return;
+    const resultado = await eventoService.joinEvento(id, userId);
+
+    if (resultado.enListaEspera) {
+      return res.status(200).json({
+        message: resultado.mensaje,
+        evento: resultado.evento,
+        enListaEspera: true
+      });
     }
 
-    if (evento.participantes.some(p => p.toString() === userId)) {
-      logger.warn(`Usuario ${userId} ya está inscrito en el evento ${id}`);
-      res.status(400).json({ message: 'Ya estás inscrito en este evento' });
-      return;
-    }
-
-    const updatedEvento = await eventoService.joinEvento(id, userId);
-    
-    await Usuario.findByIdAndUpdate(userId, { $addToSet: { eventos: id } });
-
-    logger.info(`Usuario ${userId} se unió al evento ${id}`);
-    res.status(200).json(updatedEvento);
-  } catch (error) {
-    logger.error(`Error al unirse al evento: ${error}`);
-    res.status(500).json({ message: 'Error al unirse al evento', error });
+    return res.status(200).json({
+      message: resultado.mensaje,
+      evento: resultado.evento,
+      enListaEspera: false
+    });
+  } catch (error: any) {
+    console.error('[joinEvento]', error);
+    return res.status(500).json({ message: error.message || 'Error al unirse al evento' });
   }
 };
 
-export const leaveEvento = async (req: Request, res: Response): Promise<void> => {
+export const leaveEvento = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const userId = (req as any).user?.id;
 
     if (!userId) {
-      logger.warn('No autenticado al salir del evento');  
-      res.status(401).json({ message: 'No autenticado' });
-      return;
+      return res.status(401).json({ message: 'No autenticado' });
     }
 
-    const evento = await Evento.findById(id);
+    const { io } = require('../index');
+    const evento = await eventoService.leaveEvento(id, userId, io);
+
     if (!evento) {
-      logger.warn(`Evento no encontrado para salir con ID: ${id}`);
-      res.status(404).json({ message: 'Evento no encontrado' });
-      return;
+      return res.status(404).json({ message: 'Evento no encontrado' });
     }
 
-    if (!evento.participantes.some(p => p.toString() === userId)) {
-      logger.warn(`Usuario ${userId} no está inscrito en el evento ${id}`);
-      res.status(400).json({ message: 'No estás inscrito en este evento' });
-      return;
+    return res.status(200).json({
+      message: 'Has salido del evento',
+      evento
+    });
+  } catch (error: any) {
+    console.error('[leaveEvento]', error);
+    return res.status(500).json({ message: error.message || 'Error al salir del evento' });
+  }
+};
+
+export const leaveWaitlist = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
     }
 
-    const updatedEvento = await eventoService.leaveEvento(id, userId);
-    
-    await Usuario.findByIdAndUpdate(userId, { $pull: { eventos: id } });
+    const evento = await eventoService.leaveWaitlist(id, userId);
 
-    logger.info(`Usuario ${userId} salió del evento ${id}`);
-    res.status(200).json(updatedEvento);
-  } catch (error) {
-    logger.error(`Error al salir del evento: ${error}`);
-    res.status(500).json({ message: 'Error al salir del evento', error });
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    return res.status(200).json({
+      message: 'Has salido de la lista de espera',
+      evento
+    });
+  } catch (error: any) {
+    console.error('[leaveWaitlist]', error);
+    return res.status(500).json({ message: error.message || 'Error al salir de lista de espera' });
+  }
+};
+
+export const getWaitlistPosition = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const position = await eventoService.getWaitlistPosition(id, userId);
+
+    return res.status(200).json({
+      position,
+      enListaEspera: position > 0
+    });
+  } catch (error: any) {
+    console.error('[getWaitlistPosition]', error);
+    return res.status(500).json({ message: error.message || 'Error al obtener posición' });
   }
 };
 
@@ -658,7 +698,7 @@ export async function acceptPrivateEventInvitation(req: Request, res: Response):
       return res.status(400).json({ message: 'No tienes invitación pendiente para este evento' });
     }
 
-    const eventoActualizado = await eventoService.acceptInvitation(eventoId, userId);
+    const resultado = await eventoService.acceptInvitation(eventoId, userId);
     
     await Usuario.findByIdAndUpdate(
       userId,
@@ -666,8 +706,9 @@ export async function acceptPrivateEventInvitation(req: Request, res: Response):
     );
 
     return res.status(200).json({
-      message: 'Invitación aceptada correctamente',
-      evento: eventoActualizado
+      message: resultado.mensaje,
+      evento: resultado.evento,
+      enListaEspera: resultado.enListaEspera
     });
   } catch (error) {
     logger.error(`Error aceptando invitación: ${error}`);
