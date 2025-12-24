@@ -14,7 +14,8 @@ import gamificacionService from './services/gamificacionServices';
 import aiRoutes from './routes/aiRoutes';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import {logger } from './config/logger';
+import { logger } from './config/logger';
+import { ProfanityFilter } from './profanityFilter';
 
 const app = express();
 const PORT = 3000;
@@ -25,8 +26,8 @@ const io = new SocketIOServer(httpServer, {
   cors: {
     origin: 'http://localhost:4200',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: true
-  }
+    credentials: true,
+  },
 });
 
 ////////////////////// MIDDLEWARE CORS + JSON //////////////////////
@@ -104,24 +105,42 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('chat:message', async (payload: { from: string; to: string; text: string }) => {
-    try {
-      const { from, to, text } = payload;
-      if (!from || !to || !text || !text.trim()) return;
+  socket.on(
+    'chat:message',
+    async (payload: { from: string; to: string; text: string }) => {
+      try {
+        const { from, to, text } = payload;
+        if (!from || !to || !text || !text.trim()) return;
 
-      const msg = await usuarioServices.addChatMessage(from, to, text.trim());
-      const roomId = getChatRoomId(from, to);
-      io.to(roomId).emit('chat:message', {
-        _id: msg._id,
-        from: msg.from,
-        to: msg.to,
-        text: msg.text,
-        createdAt: msg.createdAt
-      });
-    } catch (err) {
-      logger.error(`Error en chat:message: ${err}`);
-    }
-  });
+        const profanityResult = ProfanityFilter.check(text);
+        if (!profanityResult.isClean) {
+          logger.warn(
+            `🚫 Chat Bloqueado - Usuario: ${from} - Palabras: ${profanityResult.foundWords.join(', ')}`,
+          );
+          socket.emit('chat:error', {
+            message: ProfanityFilter.getErrorMessage(
+              profanityResult.foundWords,
+              'es',
+            ),
+            code: 'INAPPROPRIATE_CONTENT',
+          });
+          return;
+        }
+
+        const msg = await usuarioServices.addChatMessage(from, to, text.trim());
+        const roomId = getChatRoomId(from, to);
+        io.to(roomId).emit('chat:message', {
+          _id: msg._id,
+          from: msg.from,
+          to: msg.to,
+          text: msg.text,
+          createdAt: msg.createdAt,
+        });
+      } catch (err) {
+        logger.error(`Error en chat:message: ${err}`);
+      }
+    },
+  );
 
   function getEventRoomId(eventId: string): string {
     return `event:${eventId}`;
@@ -149,11 +168,26 @@ io.on('connection', (socket) => {
         const { eventId, userId, username, text } = payload;
         if (!eventId || !userId || !username || !text || !text.trim()) return;
 
+        const profanityResult = ProfanityFilter.check(text);
+        if (!profanityResult.isClean) {
+          logger.warn(
+            `🚫 EventChat Bloqueado - Usuario: ${username} (${userId}) - Palabras: ${profanityResult.foundWords.join(', ')}`,
+          );
+          socket.emit('chat:error', {
+            message: ProfanityFilter.getErrorMessage(
+              profanityResult.foundWords,
+              'es',
+            ),
+            code: 'INAPPROPRIATE_CONTENT',
+          });
+          return;
+        }
+
         const msg = await usuarioServices.addEventChatMessage(
           eventId,
           userId,
           username,
-          text.trim()
+          text.trim(),
         );
 
         const roomId = getEventRoomId(eventId);
@@ -164,12 +198,12 @@ io.on('connection', (socket) => {
           userId: msg.userId,
           username: msg.username,
           text: msg.text,
-          createdAt: msg.createdAt
+          createdAt: msg.createdAt,
         });
       } catch (err) {
         logger.error(`Error en eventChat:message: ${err}`);
       }
-    }
+    },
   );
 });
 
