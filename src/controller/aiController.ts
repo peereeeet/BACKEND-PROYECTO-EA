@@ -8,20 +8,17 @@ const eventoService = new EventoService();
 
 export async function searchEventsWithAi(req: Request, res: Response) {
   try {
-    const { query, userId } = req.body;
-    logger.info(`AI Controller: Recibida query -> "${query}", userId -> "${userId}"`);
+    const { query, userId, language } = req.body;
+    logger.info(`AI Controller: Recibida query -> "${query}", userId -> "${userId}", language -> "${language}"`);
 
     if (!query || typeof query !== 'string') {
-      return res.status(400).json({ message: 'La consulta (query) és obligatòria.' });
+      return res.status(400).json({ message: 'La consulta (query) es obligatoria.' });
     }
 
-    // Obtenim TOTS els esdeveniments per enviar-los com a context a ChatGPT
     const events = await eventoService.getAllEventos();
     
-    // Passem la query, els esdeveniments i el userId (si existeix) a la IA
-    const aiResult = await aiService.askWithContext(query, events, userId);
+    const aiResult = await aiService.askWithContext(query, events, userId, language || 'es');
 
-    // Filtrem els esdeveniments per retornar només els que la IA considera rellevants
     const relatedEvents = events.filter(e => 
       aiResult.relatedEventIds.includes(e._id.toString())
     );
@@ -34,6 +31,6 @@ export async function searchEventsWithAi(req: Request, res: Response) {
 
   } catch (error) {
     logger.error(`Error al controlador AI Search: ${error}`);
-    return res.status(500).json({ message: 'Error processant la cerca intel·ligent.' });
+    return res.status(500).json({ message: 'Error procesando la búsqueda inteligente.' });
   }
 }
