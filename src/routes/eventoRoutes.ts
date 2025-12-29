@@ -443,35 +443,35 @@ router.delete('/:id', authenticateToken, deleteEventoById);
 /**
  * @swagger
  * /api/event/{id}/upload:
- * post:
- * summary: Subir una foto al evento
- * tags: [Eventos]
- * security:
- * - bearerAuth: []
- * parameters:
- * - in: path
- * name: id
- * required: true
- * schema:
- * type: string
+ *   post:
+ *     summary: Subir una foto al evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
  * requestBody:
- * content:
- * multipart/form-data:
- * schema:
- * type: object
- * properties:
- * image:
- * type: string
- * format: binary
- * responses:
- * 200:
- * description: Foto subida correctamente
- * 400:
- * description: Error al subir archivo
- * 404:
- * description: Evento no encontrado
- * 500:
- * description: Error del servidor
+ *   content:
+ *     multipart/form-data:
+ *       schema:
+ *         type: object
+ *         properties:
+ *           image:
+ *             type: string
+ *             format: binary
+ *   responses:
+ *     200:
+ *       description: Foto subida correctamente
+ *     400:
+ *       description: Error al subir archivo
+ *     404:
+ *       description: Evento no encontrado
+ *     500:
+ *       description: Error del servidor
  */
 router.post('/:id/upload', authenticateToken, upload.single('image'), uploadEventoPhoto);
 
