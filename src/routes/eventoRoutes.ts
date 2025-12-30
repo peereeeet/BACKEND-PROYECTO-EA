@@ -8,10 +8,10 @@ import {
   updateEventoById,
   checkEventNameExists,
   deleteEventoById,
-  joinEvento,      
-  leaveEvento,  
+  joinEvento,
+  leaveEvento,
   leaveWaitlist,
-  getWaitlistPosition,   
+  getWaitlistPosition,
   getMisEventos,
   getEventosByBounds,
   searchEventos,
@@ -21,13 +21,12 @@ import {
   getMyPendingInvitations,
   removeInvitedUserFromEvent,
   getEventosVisibles,
-  getCalendarEvents
+  getCalendarEvents,
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 import { validateEventContent } from '../profanityMiddleware';
 
 const router = Router();
-
 
 /**
  * @swagger
@@ -219,32 +218,6 @@ router.get('/calendar', authenticateToken, getCalendarEvents);
 
 /**
  * @swagger
- * /api/event/{id}:
- *   get:
- *     summary: Obtener un evento por ID
- *     tags: [Eventos]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Evento encontrado
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Evento'
- *       404:
- *         description: Evento no encontrado
- *       500:
- *         description: Error del servidor
- */
-router.get('/:id', getEventoById);
-
-/**
- * @swagger
  * /api/event:
  *   post:
  *     summary: Crear un nuevo evento
@@ -282,7 +255,7 @@ router.get('/:id', getEventoById);
  *       500:
  *         description: Error del servidor
  */
-router.post('/', authenticateToken, validateEventContent, createEvento); 
+router.post('/', authenticateToken, validateEventContent, createEvento);
 
 /**
  * @swagger
@@ -590,7 +563,11 @@ router.post('/:id/invite', authenticateToken, inviteUsersToPrivateEvent);
  *       404:
  *         description: Evento no encontrado
  */
-router.post('/:id/accept-invitation', authenticateToken, acceptPrivateEventInvitation);
+router.post(
+  '/:id/accept-invitation',
+  authenticateToken,
+  acceptPrivateEventInvitation,
+);
 
 /**
  * @swagger
@@ -614,7 +591,11 @@ router.post('/:id/accept-invitation', authenticateToken, acceptPrivateEventInvit
  *       404:
  *         description: Evento no encontrado
  */
-router.post('/:id/reject-invitation', authenticateToken, rejectPrivateEventInvitation);
+router.post(
+  '/:id/reject-invitation',
+  authenticateToken,
+  rejectPrivateEventInvitation,
+);
 
 /**
  * @swagger
@@ -659,7 +640,11 @@ router.get('/invitations/pending', authenticateToken, getMyPendingInvitations);
  *       404:
  *         description: Evento no encontrado
  */
-router.delete('/:id/remove-invite/:userId', authenticateToken, removeInvitedUserFromEvent);
+router.delete(
+  '/:id/remove-invite/:userId',
+  authenticateToken,
+  removeInvitedUserFromEvent,
+);
 
 /**
  * @swagger
@@ -706,5 +691,32 @@ router.get('/visible', authenticateToken, getEventosVisibles);
  *       401:
  *         description: No autenticado
  */
+
+/**
+ * @swagger
+ * /api/event/{id}:
+ *   get:
+ *     summary: Obtener un evento por ID
+ *     tags: [Eventos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Evento encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Evento'
+ *       404:
+ *         description: Evento no encontrado
+ *       500:
+ *         description: Error del servidor
+ */
+
+router.get('/:id', authenticateToken, getEventoById);
 
 export default router;
