@@ -6,7 +6,7 @@ export function authenticateadminToken(req: Request, res: Response, next: NextFu
   
  
     const authHeader = req.headers["authorization"];
-    const token: string = (authHeader && authHeader.split(" ")[1]) ?? ""; // Bearer <token>
+    const token: string = (authHeader && authHeader.split(" ")[1]) ?? "";
   
 
   if (!token) {
@@ -27,6 +27,7 @@ export function authenticateadminToken(req: Request, res: Response, next: NextFu
   logger.info(`Token verificado, usuario administrador`);
   next();
 }
+
 export function authenticateToken(req: Request, res: Response, next: NextFunction) {
     const authHeader = req.headers["authorization"];
     const token: string = (authHeader && authHeader.split(" ")[1]) ?? "";
@@ -40,8 +41,14 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
         return res.status(401).json({ error: "Token inválido o expirado" });
     }
 
-    logger.info(`Token verificado, usuario`);
-    (req as any).user = decoded;
+    const payload = (decoded as any).payload;
+    if (!payload || !payload.id) {
+        return res.status(403).json({ error: "Token inválido: falta información del usuario" });
+    }
+
+    (req as any).user = payload;
+
+    logger.info(`Token verificado, usuario: ${payload.id}`);
     next();
 }
 
@@ -63,10 +70,9 @@ export function authenticateOwner(req: Request, res: Response, next: NextFunctio
     const userIdFromToken: string = (decoded as any).payload.id;
     const userIdFromParams: string = req.params.id;
 
-    // Solo permitir si es el propio usuario
     if (userIdFromToken === userIdFromParams) {
         logger.info(`Token verificado`);
-        (req as any).user = decoded;
+        (req as any).user = (decoded as any).payload;
         next();
     } else {
         return res.status(403).json({ error: "No tienes permisos para realizar esta acción" });
@@ -86,14 +92,14 @@ export function authenticateRefreshToken(req: Request, res: Response, next: Next
       logger.warn("Refresh token inválido o expirado");
       return res.status(401).json({ error: "Refresh token inválido o expirado" });
     }
-    (req as any).user = decoded;
 
-  const refreshtokenUserid : string = (decoded as any).payload.id;
-    // Verificar que el userId del body coincide con el del token
+    const refreshtokenUserid : string = (decoded as any).payload.id;
     if (refreshtokenUserid !== userId) {
       logger.warn("El userId no coincide con el del token");
       return res.status(403).json({ error: "El userId no coincide con el del token" });
     }
+
+    (req as any).user = (decoded as any).payload;
 
     logger.info(`token verificado, usuario`);
     next();

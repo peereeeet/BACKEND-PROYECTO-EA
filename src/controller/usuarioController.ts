@@ -5,15 +5,17 @@ import { validationResult } from 'express-validator';
 import Usuario from '../models/usuario';
 import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
-import {logger } from '../config/logger';
+import { logger } from '../config/logger';
 import { OAuth2Client } from 'google-auth-library';
-import crypto from 'crypto';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-export async function createUser(req: Request, res: Response): Promise<Response> {
+export async function createUser(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     logger.error(`Errores de validación al crear usuario:${errors.array()}`);
@@ -21,7 +23,13 @@ export async function createUser(req: Request, res: Response): Promise<Response>
   }
   try {
     const { username, gmail, password, birthday, rol } = req.body as IUsuario;
-    const newUser: Partial<IUsuario> = { username, gmail, password, birthday, rol: rol || 'usuario' };
+    const newUser: Partial<IUsuario> = {
+      username,
+      gmail,
+      password,
+      birthday,
+      rol: rol || 'usuario',
+    };
     const user = await userService.createUser(newUser);
     logger.info(`Usuario creado: ${user!.username}`);
     return res.status(201).json(user);
@@ -36,16 +44,34 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { password } = req.body as { password?: string };
 
+    const user = await Usuario.findById(id);
+    if (!user) {
+      logger.warn(`Intento de eliminación de usuario inexistente. ID: ${id}`);
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    if (user.isGoogleUser) {
+      await Usuario.findByIdAndUpdate(id, { isActive: false });
+
+      logger.info(`Usuario (Google) con ID: ${id} eliminado (sin contraseña).`);
+      return res.status(204).send();
+    }
+
     if (!password) {
-      logger.warn('Intento de eliminacion de usuario sin proporcionar contraseña');
+      logger.warn(
+        'Intento de eliminación de usuario sin proporcionar contraseña',
+      );
       return res.status(400).json({ message: 'Contraseña requerida.' });
     }
 
     const ok = await userService.verifyPasswordAndDelete(id, password);
     if (!ok) {
-      logger.warn(`Contraseña incorrecta para eliminar el usuario con ID: ${id}`);
+      logger.warn(
+        `Contraseña incorrecta para eliminar el usuario con ID: ${id}`,
+      );
       return res.status(401).json({ message: 'Contraseña incorrecta.' });
     }
+
     logger.info(`Usuario con ID: ${id} eliminado correctamente`);
     return res.status(204).send();
   } catch (err) {
@@ -58,7 +84,7 @@ export async function checkUserExistsForReset(req: Request, res: Response) {
   try {
     const { emailOrUsername } = req.body || {};
     if (!emailOrUsername || typeof emailOrUsername !== 'string') {
-      logger.warn('Falta email o usuario en checkUserExistsForReset');  
+      logger.warn('Falta email o usuario en checkUserExistsForReset');
       return res.status(400).json({ message: 'Falta email o usuario.' });
     }
 
@@ -72,7 +98,9 @@ export async function checkUserExistsForReset(req: Request, res: Response) {
       gmail: user.gmail,
     });
   } catch (err: any) {
-    return res.status(500).json({ message: err?.message || 'Error al comprobar usuario.' });
+    return res
+      .status(500)
+      .json({ message: err?.message || 'Error al comprobar usuario.' });
   }
 }
 
@@ -85,11 +113,18 @@ export async function directResetPassword(req: Request, res: Response) {
     await userService.setPasswordByUserId(userId, newPassword);
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(400).json({ message: err?.message || 'No se pudo actualizar la contraseña.' });
+    return res
+      .status(400)
+      .json({
+        message: err?.message || 'No se pudo actualizar la contraseña.',
+      });
   }
 }
 
-export const updateUserRole = async (req: Request, res: Response): Promise<void> => {
+export const updateUserRole = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     const { rol } = req.body;
@@ -109,26 +144,34 @@ export const updateUserRole = async (req: Request, res: Response): Promise<void>
     res.status(200).json({ message: 'Rol actualizado correctamente', usuario });
   } catch (error) {
     logger.error(`Error al actualizar rol del usuario: ${error}`);
-    res.status(500).json({ message: 'Error al actualizar rol del usuario', error });
+    res
+      .status(500)
+      .json({ message: 'Error al actualizar rol del usuario', error });
   }
 };
 
-export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
+export const getAllUsers = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit as string) || 10));
+    const limit = Math.max(
+      1,
+      Math.min(50, parseInt(req.query.limit as string) || 10),
+    );
     const skip = (page - 1) * limit;
 
     const [total, users] = await Promise.all([
       Usuario.countDocuments(),
-      Usuario.find().skip(skip).limit(limit).populate('eventos')
+      Usuario.find().skip(skip).limit(limit).populate('eventos'),
     ]);
     logger.info(`Usuarios obtenidos: pagina ${page}, limite ${limit}`);
     res.status(200).json({
       data: users,
       page,
       totalPages: Math.ceil(total / limit),
-      totalItems: total
+      totalItems: total,
     });
   } catch (error) {
     logger.error(`Error al obtener usuarios: ${error}`);
@@ -136,7 +179,10 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-export async function getUserById(req: Request, res: Response): Promise<Response> {
+export async function getUserById(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -144,11 +190,11 @@ export async function getUserById(req: Request, res: Response): Promise<Response
       return res.status(400).json({ message: 'ID invalido' });
     }
     const user = await userService.getUserById(id);
-    if (!user){ 
+    if (!user) {
       logger.warn(`Usuario no encontrado en getUserById con ID: ${id}`);
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     }
-    logger.info(`Usuario obtenido con ID: ${id}`);  
+    logger.info(`Usuario obtenido con ID: ${id}`);
     return res.status(200).json(user);
   } catch (error) {
     logger.error(`Error en getUserById: ${error}`);
@@ -175,43 +221,54 @@ export const getUserEvents = async (req: Request, res: Response) => {
         { 'participants.user': userId },
         { members: userId },
         { 'members.user': userId },
-      ]
+      ],
     })
-    .select('name schedule address titulo title fecha date lugar location') 
-    .lean();
+      .select('name schedule address titulo title fecha date lugar location')
+      .lean();
     logger.info(`Eventos obtenidos para el usuario con ID: ${id}`);
     return res.json({ ok: true, data: events || [] });
   } catch (err) {
     logger.error(`getUserEvents error: ${err}`);
-    return res.status(500).json({ ok: false, message: 'No se pudieron listar los eventos' });
+    return res
+      .status(500)
+      .json({ ok: false, message: 'No se pudieron listar los eventos' });
   }
 };
 
-export async function updateOwnProfile(req: Request, res: Response): Promise<Response> {
+export async function updateOwnProfile(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   try {
     const authId = (req as any)?.user?.payload?.id;
     const { id } = req.params;
 
     if (!authId || authId !== id) {
-      logger.warn(`Intento no autorizado de modificar perfil: authId=${authId}, targetId=${id}`);
-      return res.status(403).json({ error: 'Solo puedes modificar tu propio perfil' });
+      logger.warn(
+        `Intento no autorizado de modificar perfil: authId=${authId}, targetId=${id}`,
+      );
+      return res
+        .status(403)
+        .json({ error: 'Solo puedes modificar tu propio perfil' });
     }
     if (!mongoose.Types.ObjectId.isValid(id)) {
       logger.warn(`ID invalido en updateOwnProfile: ${id}`);
       return res.status(400).json({ error: 'ID invalido' });
     }
 
-    const { username, gmail, password, birthday } = req.body as Partial<IUsuario>;
+    const { username, gmail, password, birthday } =
+      req.body as Partial<IUsuario>;
 
     const user = await Usuario.findById(id);
-    if (!user){ 
+    if (!user) {
       logger.warn(`Usuario no encontrado en updateOwnProfile con ID: ${id}`);
       return res.status(404).json({ error: 'USUARIO NO ENCONTRADO' });
     }
 
     if (typeof username === 'string') user.username = username;
-    if (typeof gmail === 'string')    user.gmail = gmail;
-    if (birthday !== undefined)       user.birthday = new Date(String(birthday)) as any;
+    if (typeof gmail === 'string') user.gmail = gmail;
+    if (birthday !== undefined)
+      user.birthday = new Date(String(birthday)) as any;
     if (typeof password === 'string' && password.trim() !== '') {
       user.password = password;
     }
@@ -224,35 +281,45 @@ export async function updateOwnProfile(req: Request, res: Response): Promise<Res
   } catch (e: any) {
     if (e?.code === 11000) {
       logger.warn(`Conflicto al actualizar perfil: usuario o correo ya en uso`);
-      return res.status(409).json({ ok: false, error: 'Usuario o correo ya en uso' });
+      return res
+        .status(409)
+        .json({ ok: false, error: 'Usuario o correo ya en uso' });
     }
     logger.error(`Error en updateOwnProfile: ${e}`);
-    return res.status(500).json({ ok: false, error: 'No se pudo actualizar el perfil' });
+    return res
+      .status(500)
+      .json({ ok: false, error: 'No se pudo actualizar el perfil' });
   }
 }
 
-export async function updateUserById(req: Request, res: Response): Promise<Response> {
+export async function updateUserById(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   try {
     const { id } = req.params;
     const userData: Partial<IUsuario> = req.body;
     const updatedUser = await userService.updateUserById(id, userData);
-    if (!updatedUser){
-      logger.warn(`Usuario no encontrado en updateUserById con ID: ${id}`); 
+    if (!updatedUser) {
+      logger.warn(`Usuario no encontrado en updateUserById con ID: ${id}`);
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
-  }
-  logger.info(`Usuario actualizado con ID: ${id}`);
+    }
+    logger.info(`Usuario actualizado con ID: ${id}`);
     return res.status(200).json(updatedUser);
   } catch (error) {
-    logger.error(`Error en updateUserById: ${error}`);  
+    logger.error(`Error en updateUserById: ${error}`);
     return res.status(400).json({ message: (error as Error).message });
   }
 }
 
-export async function deleteUserById(req: Request, res: Response): Promise<Response> {
+export async function deleteUserById(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   try {
     const { id } = req.params;
     const deletedUser = await userService.deleteUserById(id);
-    if (!deletedUser){
+    if (!deletedUser) {
       logger.warn(`Usuario no encontrado en deleteUserById con ID: ${id}`);
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     }
@@ -264,16 +331,21 @@ export async function deleteUserById(req: Request, res: Response): Promise<Respo
   }
 }
 
-export async function addEventToUser(req: Request, res: Response): Promise<Response> {
+export async function addEventToUser(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   try {
     const { id } = req.params;
     const { eventId } = req.body;
-    if (!eventId){ 
-      logger.warn(`Falta eventId en addEventToUser para el usuario con ID: ${id}`);
+    if (!eventId) {
+      logger.warn(
+        `Falta eventId en addEventToUser para el usuario con ID: ${id}`,
+      );
       return res.status(400).json({ message: 'Falta eventId' });
-  }
+    }
     const updated = await userService.addEventToUser(id, eventId);
-    if (!updated){ 
+    if (!updated) {
       logger.warn(`Usuario no encontrado en addEventToUser con ID: ${id}`);
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     }
@@ -290,23 +362,38 @@ function removePassword(user: any) {
   return userObj;
 }
 
-export async function loginUser(req: Request, res: Response): Promise<Response> {
+export async function loginUser(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     logger.error(`Errores de validación en loginUser: ${errors.array()}`);
     return res.status(400).json({ errors: errors.array() });
   }
-  
+
   try {
     const { username, password } = req.body;
-    
+
     const user = await userService.loginUser(username, password);
     if (!user) {
       logger.warn(`Credenciales incorrectas para el usuario: ${username}`);
-      return res.status(401).json({ 
-        message: 'CREDENCIALES INCORRECTAS' 
+      return res.status(401).json({
+        message: 'CREDENCIALES INCORRECTAS',
       });
     }
+
+    if (user.isGoogleUser) {
+      return res.status(400).json({
+        message:
+          'Esta cuenta se registró con Google. Usa "Continuar con Google".',
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'USER_DISABLED' });
+    }
+
     const token = await generateToken(user!, res);
     const refreshToken = await generateRefreshToken(user!, res);
 
@@ -315,7 +402,7 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
       message: 'LOGIN EXITOSO',
       user: removePassword(user),
       token,
-      refreshToken
+      refreshToken,
     });
   } catch (error) {
     logger.error(`Error en loginUser: ${error}`);
@@ -323,13 +410,12 @@ export async function loginUser(req: Request, res: Response): Promise<Response> 
   }
 }
 
-export async function loginWithGoogle(req: Request, res: Response): Promise<Response> {
+export async function loginWithGoogle(req: Request, res: Response) {
   try {
-    const { credential } = req.body || {};
+    const { credential, birthday } = req.body;
 
     if (!credential) {
-      logger.warn('Falta credential de Google en la petición');
-      return res.status(400).json({ message: 'Falta credential de Google' });
+      return res.status(400).json({ message: 'Falta el token de Google' });
     }
 
     const ticket = await googleClient.verifyIdToken({
@@ -338,70 +424,96 @@ export async function loginWithGoogle(req: Request, res: Response): Promise<Resp
     });
 
     const payload = ticket.getPayload();
-    if (!payload) {
-      logger.warn('Payload vacío en token de Google');
-      return res.status(401).json({ message: 'Token de Google no válido' });
+    if (!payload || !payload.email) {
+      return res.status(400).json({ message: 'Token de Google no válido' });
     }
 
     const gmail = payload.email;
+    const googleId = payload.sub || null;
     const name =
-      payload.name ||
-      payload.given_name ||
-      (gmail ? gmail.split('@')[0] : 'usuario_google');
+      payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
 
-    if (!gmail) {
-      logger.warn('Google no devolvió email');
-      return res.status(400).json({ message: 'Google no devolvió email' });
+    let birthdayDate: Date | undefined = undefined;
+    if (birthday) {
+      const parsed = new Date(birthday as string);
+      if (!Number.isNaN(parsed.getTime())) {
+        birthdayDate = parsed;
+      }
+    }
+
+    if (!birthdayDate) {
+      const rawBirth = (payload as any).birthdate || (payload as any).birthday;
+      if (rawBirth) {
+        const parsed = new Date(rawBirth as string);
+        if (!Number.isNaN(parsed.getTime())) {
+          birthdayDate = parsed;
+        }
+      }
     }
 
     let user = await Usuario.findOne({ gmail });
 
     if (!user) {
-      const randomPassword = crypto.randomBytes(16).toString('hex');
       user = new Usuario({
         username: name,
         gmail,
-        password: '1234567',
-        birthday: new Date('2000-01-01'),
+        birthday: birthdayDate,
         rol: 'usuario',
-      });
+        isGoogleUser: true,
+        googleId,
+      } as Partial<IUsuario>);
 
       await user.save();
-      logger.info(`Usuario creado via Google: ${gmail}`);
+    } else {
+      if (!user.isGoogleUser) {
+        return res.status(400).json({
+          message:
+            'Esta cuenta ya existe sin Google. Inicia sesión con usuario y contraseña.',
+        });
+      }
+
+      let mustSave = false;
+      if (!user.googleId && googleId) {
+        user.googleId = googleId;
+        mustSave = true;
+      }
+      if (!user.birthday && birthdayDate) {
+        user.birthday = birthdayDate;
+        mustSave = true;
+      }
+      if (mustSave) {
+        await user.save();
+      }
     }
 
     if (!user.isActive) {
-      logger.warn(`Usuario ${gmail} intentó loguearse pero está deshabilitado`);
-      return res.status(403).json({ message: 'Cuenta deshabilitada' });
+      return res.status(403).json({ message: 'USER_DISABLED' });
     }
 
-    const token = await generateToken(user, res);
-    const refreshToken = await generateRefreshToken(user, res);
-
-    logger.info(`Login con Google exitoso para ${gmail}`);
+    const token = await generateToken(user!, res);
+    const refreshToken = await generateRefreshToken(user!, res);
 
     return res.status(200).json({
-      message: 'LOGIN GOOGLE EXITOSO',
-      user: removePassword(user),
+      message: 'LOGIN EXITOSO',
+      user,
       token,
       refreshToken,
     });
-  } catch (error: any) {
-    logger.error(
-      `Error en loginWithGoogle: ${
-        error instanceof Error ? error.message : JSON.stringify(error)
-      }`
-    );
-    return res.status(500).json({ error: 'ERROR EN LOGIN CON GOOGLE' });
+  } catch (error) {
+    logger.error(`Error en loginWithGoogle: ${error}`);
+    return res.status(500).json({ message: 'ERROR EN LOGIN CON GOOGLE' });
   }
 }
 
 /* Create admin only development */
-export async function createAdminUser(req: Request, res: Response): Promise<Response> {
+export async function createAdminUser(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   try {
     await userService.createAdminUser();
     return res.status(200).json({ message: 'Usuario admin verificado/creado' });
-  } catch (error) {
+  } catch (_error) {
     return res.status(500).json({ error: 'Error con usuario admin' });
   }
 }
@@ -411,23 +523,33 @@ export const checkEmailExists = async (req: Request, res: Response) => {
     const { gmail, userId } = req.body;
 
     if (!gmail) {
-      return res.status(400).json({ exists: false, message: "El campo 'gmail' es obligatorio" });
+      return res
+        .status(400)
+        .json({ exists: false, message: "El campo 'gmail' es obligatorio" });
     }
 
     const existingUser = await Usuario.findOne({ gmail });
 
     if (!existingUser) {
-      return res.status(200).json({ exists: false, message: "El correo está disponible" });
+      return res
+        .status(200)
+        .json({ exists: false, message: 'El correo está disponible' });
     }
 
     if (userId && existingUser._id.toString() === userId) {
-      return res.status(200).json({ exists: false, message: "El correo pertenece al mismo usuario" });
+      return res
+        .status(200)
+        .json({
+          exists: false,
+          message: 'El correo pertenece al mismo usuario',
+        });
     }
 
-    return res.status(200).json({ exists: true, message: "El correo ya está registrado" });
-
-  } catch (error) {
-    res.status(500).json({ error: "Error al verificar el correo" });
+    return res
+      .status(200)
+      .json({ exists: true, message: 'El correo ya está registrado' });
+  } catch (_error) {
+    res.status(500).json({ error: 'Error al verificar el correo' });
   }
 };
 
@@ -436,31 +558,45 @@ export const checkUsernameExists = async (req: Request, res: Response) => {
     const { username, userId } = req.body;
 
     if (!username) {
-      logger.warn("Falta username en checkUsernameExists");
-      return res.status(400).json({ exists: false, message: "El campo 'username' es obligatorio" });
+      logger.warn('Falta username en checkUsernameExists');
+      return res
+        .status(400)
+        .json({ exists: false, message: "El campo 'username' es obligatorio" });
     }
 
     const existingUser = await Usuario.findOne({ username });
 
     if (!existingUser) {
       logger.info(`Nombre de usuario disponible: ${username}`);
-      return res.status(200).json({ exists: false, message: "Nombre disponible" });
+      return res
+        .status(200)
+        .json({ exists: false, message: 'Nombre disponible' });
     }
 
     if (userId && existingUser._id.toString() === userId) {
-      logger.info(`El nombre de usuario pertenece al mismo usuario: ${username}`);
-      return res.status(200).json({ exists: false, message: "Nombre pertenece al mismo usuario" });
+      logger.info(
+        `El nombre de usuario pertenece al mismo usuario: ${username}`,
+      );
+      return res
+        .status(200)
+        .json({ exists: false, message: 'Nombre pertenece al mismo usuario' });
     }
     logger.info(`El nombre de usuario ya está en uso: ${username}`);
-    return res.status(200).json({ exists: true, message: "El nombre de usuario ya está en uso" });
-
+    return res
+      .status(200)
+      .json({ exists: true, message: 'El nombre de usuario ya está en uso' });
   } catch (error) {
     logger.error(`Error en checkUsernameExists: ${error}`);
-    return res.status(500).json({ error: "Error al verificar el nombre de usuario" });
+    return res
+      .status(500)
+      .json({ error: 'Error al verificar el nombre de usuario' });
   }
 };
 
-export async function disableUser(req: Request, res: Response): Promise<Response> {
+export async function disableUser(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   try {
     const { id } = req.params;
     const updatedUser = await userService.disableUser(id);
@@ -471,18 +607,19 @@ export async function disableUser(req: Request, res: Response): Promise<Response
     }
     logger.info(`Usuario deshabilitado con ID: ${id}`);
     return res.status(200).json(updatedUser);
-
   } catch (error) {
     logger.error(`Error en disableUser: ${error}`);
     return res.status(500).json({ message: (error as Error).message });
   }
-
 }
-export async function refreshToken(req: Request, res: Response): Promise<Response> {
+export async function refreshToken(
+  req: Request,
+  res: Response,
+): Promise<Response> {
   try {
     const id = (req as any).user.payload.id;
     const user = await userService.getUserById(id);
-    if (!user) {  
+    if (!user) {
       logger.warn(`Usuario no encontrado en refreshToken con ID: ${id}`);
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     }
@@ -492,7 +629,7 @@ export async function refreshToken(req: Request, res: Response): Promise<Respons
     logger.info(`Nuevo token generado para el usuario con ID: ${id}`);
     logger.info({ token: newToken }, 'Nuevo token generado');
     return res.status(200).json({
-      token: newToken
+      token: newToken,
     });
   } catch (error) {
     logger.error(`Error en refreshToken: ${error}`);
@@ -526,22 +663,22 @@ export async function listFriends(req: Request, res: Response) {
     logger.info(`Lista de amigos obtenida para el usuario ${id}`);
     return res.status(200).json(data);
   } catch (e: any) {
-    logger.error("Error en listFriends:", e);
+    logger.error('Error en listFriends:', e);
     return res.status(400).json({ message: e.message });
   }
 }
 
-export async function sendFriendRequest(req: Request, res:Response) {
+export async function sendFriendRequest(req: Request, res: Response) {
   try {
     const { id, targetId } = req.body;
     const result = await userService.sendFriendRequest(id, targetId);
-    logger.info(`Solicitud de amistad enviada: from: ${id}, to: ${targetId}`); 
+    logger.info(`Solicitud de amistad enviada: from: ${id}, to: ${targetId}`);
     res.status(200).json(result);
-  } catch (error:any) {
-    logger.error("Error en sendFriendRequest:", error);
+  } catch (error: any) {
+    logger.error('Error en sendFriendRequest:', error);
     res.status(400).json({ error: error.message });
   }
-};
+}
 
 export const getSentRequests = async (req: Request, res: Response) => {
   try {
@@ -550,43 +687,47 @@ export const getSentRequests = async (req: Request, res: Response) => {
     logger.info(`Lista de solicitudes enviadas obtenida para el usuario ${id}`);
     return res.status(200).json({ ok: true, data });
   } catch (err: any) {
-    logger.error("Error en getSentRequests:", err);
+    logger.error('Error en getSentRequests:', err);
     return res.status(400).json({ ok: false, message: err.message || 'Error' });
   }
 };
 
-export async function acceptFriendRequest(req:Request, res:Response){
+export async function acceptFriendRequest(req: Request, res: Response) {
   try {
     const { id, requesterId } = req.body;
     const result = await userService.acceptFriendRequest(id, requesterId);
-    logger.info(`Solicitud de amistad aceptada: by: ${id}, from: ${requesterId}`);
+    logger.info(
+      `Solicitud de amistad aceptada: by: ${id}, from: ${requesterId}`,
+    );
     res.status(200).json(result);
   } catch (error: any) {
-    logger.error("Error en acceptFriendRequest:", error);
+    logger.error('Error en acceptFriendRequest:', error);
     res.status(400).json({ error: error.message });
   }
-};
+}
 
-export async function rejectFriendRequest(req:Request, res:Response){
+export async function rejectFriendRequest(req: Request, res: Response) {
   try {
     const { id, requesterId } = req.body;
     const result = await userService.rejectFriendRequest(id, requesterId);
-    logger.info(`Solicitud de amistad rechazada: by: ${id}, from: ${requesterId}`);
+    logger.info(
+      `Solicitud de amistad rechazada: by: ${id}, from: ${requesterId}`,
+    );
     res.status(200).json(result);
   } catch (error: any) {
-    logger.error("Error en rejectFriendRequest:", error);
+    logger.error('Error en rejectFriendRequest:', error);
     res.status(400).json({ error: error.message });
   }
-};
+}
 
-export async function getFriendRequests(req:Request, res: Response){
+export async function getFriendRequests(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const requests = await userService.getFriendRequests(id);
     logger.info(`Solicitudes de amistad obtenidas para el usuario ${id}`);
     res.status(200).json(requests);
   } catch (error: any) {
-    logger.error("Error en getFriendRequests:", error);
+    logger.error('Error en getFriendRequests:', error);
     res.status(400).json({ error: error.message });
   }
 }
@@ -595,10 +736,10 @@ export async function removeFriend(req: Request, res: Response) {
   try {
     const { id, friendId } = req.params;
     const r = await userService.removeFriend(id, friendId);
-    logger.info(`Amigo eliminado: user: ${id}, friend: ${friendId}`); 
+    logger.info(`Amigo eliminado: user: ${id}, friend: ${friendId}`);
     return res.status(200).json(r);
   } catch (e: any) {
-    logger.error("Error en removeFriend:", e);
+    logger.error('Error en removeFriend:', e);
     return res.status(400).json({ message: e.message });
   }
 }
@@ -607,9 +748,15 @@ export const postHeartbeat = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const u = await userService.heartbeat(id);
-    return res.json({ ok: true, online: u?.online === true, lastSeen: u?.lastSeen });
-  } catch (e) {
-    return res.status(500).json({ ok: false, message: 'No se pudo registrar heartbeat' });
+    return res.json({
+      ok: true,
+      online: u?.online === true,
+      lastSeen: u?.lastSeen,
+    });
+  } catch (_e) {
+    return res
+      .status(500)
+      .json({ ok: false, message: 'No se pudo registrar heartbeat' });
   }
 };
 
@@ -619,26 +766,41 @@ export const removeFriendBoth = async (req: Request, res: Response) => {
 
     if (!id || !friendId) {
       logger.warn('Faltan parametros id o friendId en removeFriendBoth');
-      return res.status(400).json({ ok: false, message: 'Faltan parametros id o friendId' });
+      return res
+        .status(400)
+        .json({ ok: false, message: 'Faltan parametros id o friendId' });
     }
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(friendId)) {
-      logger.warn(`IDs inválidos en removeFriendBoth: id=${id}, friendId=${friendId}`);
-      return res.status(400).json({ ok: false, message: 'Alguno de los IDs no es un ObjectId válido' });
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(friendId)
+    ) {
+      logger.warn(
+        `IDs inválidos en removeFriendBoth: id=${id}, friendId=${friendId}`,
+      );
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          message: 'Alguno de los IDs no es un ObjectId válido',
+        });
     }
 
     const me = await userService.unlinkFriendsBothWays(id, friendId);
     logger.info(`Amistad eliminada entre usuarios: ${id} y ${friendId}`);
     return res.json({ ok: true, me });
-
   } catch (e: any) {
     const msg = typeof e?.message === 'string' ? e.message : 'Error interno';
     if (msg.startsWith('INVALID_OBJECT_ID')) {
       logger.error(`IDs invalidos en removeFriendBoth: ${msg}`);
-      return res.status(400).json({ ok: false, message: 'ID no valido', detail: msg });
+      return res
+        .status(400)
+        .json({ ok: false, message: 'ID no valido', detail: msg });
     }
     logger.error({ error: e }, 'removeFriendBoth error');
     logger.error(`Error en removeFriendBoth: ${msg}`);
-    return res.status(500).json({ ok: false, message: 'No se pudo eliminar la amistad' });
+    return res
+      .status(500)
+      .json({ ok: false, message: 'No se pudo eliminar la amistad' });
   }
 };
 
@@ -647,7 +809,9 @@ export const getChatBetween = async (req: Request, res: Response) => {
     const { userId, friendId } = req.params;
 
     if (!userId || !friendId) {
-      return res.status(400).json({ message: 'userId y friendId son obligatorios' });
+      return res
+        .status(400)
+        .json({ message: 'userId y friendId son obligatorios' });
     }
 
     const messages = await userService.getChatBetween(userId, friendId);
@@ -663,11 +827,13 @@ export const postChatMessage = async (req: Request, res: Response) => {
     const { userId, friendId } = req.params;
     const { text } = req.body;
 
-    if (!userId || !friendId || !text || !text.trim()) {
-      return res.status(400).json({ message: 'Datos incompletos' });
-    }
-
-    const msg = await userService.addChatMessage(userId, friendId, text.trim());
+    const msg = {
+      _id: new mongoose.Types.ObjectId().toString(),
+      from: userId,
+      to: friendId,
+      text: text.trim(),
+      createdAt: new Date(),
+    };
     res.status(201).json(msg);
   } catch (err) {
     logger.error({ error: err }, 'Error al guardar mensaje');
@@ -696,22 +862,19 @@ export const postEventChatMessage = async (req: Request, res: Response) => {
     const { eventId } = req.params;
     const { userId, username, text } = req.body || {};
 
-    if (!eventId || !userId || !username || !text || !String(text).trim()) {
-      return res.status(400).json({ message: 'Datos incompletos' });
-    }
-
-    const msg = await userService.addEventChatMessage(
+    const msg = {
+      _id: new mongoose.Types.ObjectId().toString(),
       eventId,
-      String(userId),
-      String(username),
-      String(text).trim()
-    );
+      userId,
+      username,
+      text: String(text).trim(),
+      createdAt: new Date(),
+    };
     return res.status(201).json(msg);
   } catch (err) {
     logger.error({ error: err }, 'Error al guardar mensaje de evento');
     return res
       .status(500)
-      .json({ message: 'Error al guardar mensaje de evento' });
+      .json({ message: 'Error al procesar mensaje de evento' });
   }
 };
-  

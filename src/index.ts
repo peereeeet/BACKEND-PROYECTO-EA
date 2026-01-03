@@ -7,10 +7,14 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
 import eventoRoutes from './routes/eventoRoutes';
 import valoracionRoutes from './routes/valoracionRoutes';
+import gamificacionRoutes from './routes/gamificacionRoutes';
+import gamificacionService from './services/gamificacionServices';
+import aiRoutes from './routes/aiRoutes';
 import { UserService } from './services/usuarioServices';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { logger } from './config/logger';
+import { ProfanityFilter } from './profanityFilter';
 
 // ----------- APP & SERVER ----------- //
 dotenv.config();
@@ -47,6 +51,7 @@ mongoose
     logger.info({ url: mongoURL }, 'MongoDB conectado correctamente');
 
     await usuarioServices.createAdminUser();
+    await gamificacionService.inicializarInsignias();
 
     httpServer.listen(PORT, () => {
       logger.info(`Backend escuchando en http://localhost:${PORT}`);
@@ -61,6 +66,8 @@ mongoose
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
 app.use('/api/ratings', valoracionRoutes);
+app.use('/api/gamificacion', gamificacionRoutes);
+app.use('/api/ai', aiRoutes);
 
 // ----------- SOCKET.IO ----------- //
 const io = new SocketIOServer(httpServer, {
@@ -70,60 +77,39 @@ const io = new SocketIOServer(httpServer, {
       'https://ea2.upc.edu'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: true
-  }
+    credentials: true,
+  },
 });
-
-////////////////////// MIDDLEWARE CORS + JSON //////////////////////
-app.use(cors());
-app.use(express.json());
-app.use(express.json() as express.RequestHandler);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// RUTAS REST
-app.use('/api/user', usuarioRoutes);
-app.use('/api/event', eventoRoutes);
-app.use('/api/ratings', valoracionRoutes);
-
-////////////////////// CONEXIÓN A BBDD //////////////////////
-mongoose
-  .connect('mongodb://localhost:27017/BBDD')
-  .then(async () => {
-    logger.info('CONEXION EXITOSA A LA BASE DE DATOS DE MONGODB');
-
-    await usuarioServices.createAdminUser();
-
-    httpServer.listen(PORT, () => {
-      logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
-      logger.info(`Swagger docs en http://localhost:${PORT}/api-docs`);
-    });
-  })
-  .catch((err) => {
-    logger.error('HAY ALGUN ERROR CON LA CONEXION', err);
-  });
 
 ////////////////////// SOCKET.IO: ONLINE / OFFLINE //////////////////////
 function getChatRoomId(a: string, b: string): string {
   return [a, b].sort().join(':');
 }
+
 function getEventRoomId(eventId: string): string {
   return `event:${eventId}`;
 }
 
-// Handlers de WebSockets
+interface SocketData {
+  userId?: string;
+}
+
 io.on('connection', (socket) => {
-  logger.info(` Cliente conectado ${socket.id}`);
+  logger.info(`✅ Cliente conectado ${socket.id}`);
+
   socket.on('user:online', async (userId: string) => {
     try {
       if (!userId) return;
 
-      (socket.data as any).userId = userId;
-      socket.join(`user: ${userId}`);
+      const data = socket.data as SocketData;
+      data.userId = userId;
+
+      socket.join(`user:${userId}`);
 
       await usuarioServices.setUserOnline(userId);
 
       io.emit('user:online', { userId });
-      logger.info(`Usuario online: ${userId}`);
+      logger.info(`🟢 Usuario online: ${userId}`);
     } catch (err) {
       logger.error(`Error en user:online: ${err}`);
     }
@@ -131,7 +117,8 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', async () => {
     try {
-      const userId = (socket.data as any).userId;
+      const data = socket.data as SocketData;
+      const userId = data.userId;
       if (!userId) return;
 
       await usuarioServices.setUserOffline(userId);
@@ -155,6 +142,19 @@ io.on('connection', (socket) => {
     try {
       if (!from || !to || !text?.trim()) return;
 
+      // Filtro de obscenidades
+      const profanityResult = ProfanityFilter.check(text);
+      if (!profanityResult.isClean) {
+        socket.emit('chat:error', {
+          message: ProfanityFilter.getErrorMessage(
+            profanityResult.foundWords,
+            'es',
+          ),
+          code: 'INAPPROPRIATE_CONTENT',
+        });
+        return;
+      }
+
       const msg = await usuarioServices.addChatMessage(from, to, text.trim());
       const roomId = getChatRoomId(from, to);
 
@@ -173,50 +173,28 @@ io.on('connection', (socket) => {
     try {
       if (!eventId || !userId || !username || !text?.trim()) return;
 
+      // Filtro de obscenidades
+      const profanityResult = ProfanityFilter.check(text);
+      if (!profanityResult.isClean) {
+        socket.emit('chat:error', {
+          message: ProfanityFilter.getErrorMessage(
+            profanityResult.foundWords,
+            'es',
+          ),
+          code: 'INAPPROPRIATE_CONTENT',
+        });
+        return;
+      }
+
       const msg = await usuarioServices.addEventChatMessage(
         eventId, userId, username, text.trim()
       );
 
       io.to(getEventRoomId(eventId)).emit('eventChat:message', msg);
     } catch (err) {
-      logger.error(`Error en eventChat:join: ${err}`);
+      logger.error(`Error en eventChat:message: ${err}`);
     }
   });
-
-  socket.on(
-    'eventChat:message',
-    async (payload: {
-      eventId: string;
-      userId: string;
-      username: string;
-      text: string;
-    }) => {
-      try {
-        const { eventId, userId, username, text } = payload;
-        if (!eventId || !userId || !username || !text || !text.trim()) return;
-
-        const msg = await usuarioServices.addEventChatMessage(
-          eventId,
-          userId,
-          username,
-          text.trim()
-        );
-
-        const roomId = getEventRoomId(eventId);
-
-        io.to(roomId).emit('eventChat:message', {
-          _id: msg._id,
-          eventId: msg.eventId,
-          userId: msg.userId,
-          username: msg.username,
-          text: msg.text,
-          createdAt: msg.createdAt
-        });
-      } catch (err) {
-        logger.error(`Error en eventChat:message: ${err}`);
-      }
-    }
-  );
 });
 
 export { io };
