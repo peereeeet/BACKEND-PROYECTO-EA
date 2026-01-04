@@ -15,7 +15,8 @@ export interface IUsuario {
   friendRequest: Types.ObjectId[];
   sentRequests: Types.ObjectId[];
   online?: boolean;
-  lastSeen?: Date; 
+  lastSeen?: Date;
+  profilePhoto?: string;  // ← NUEVA: URL de la foto de perfil
   comparePassword(candidatePassword: string): Promise<boolean>;
   isModified(path: string): boolean;
   isActive: boolean;
@@ -33,6 +34,7 @@ const usuarioSchema = new Schema<IUsuario>({
   isActive: { type: Boolean, default: true },
   isGoogleUser: { type: Boolean, default: false },
   googleId: { type: String, default: null },
+  profilePhoto: { type: String, default: null },  // ← NUEVA: Campo para foto de perfil
   friends: [{ type: Schema.Types.ObjectId, ref: 'Usuario', index: true }],
   friendRequest: [{type: Schema.Types.ObjectId, ref: 'Usuario', index: true}],
   sentRequests: [{type: Schema.Types.ObjectId, ref: 'Usuario', index: true}],

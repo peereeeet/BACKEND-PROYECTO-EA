@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import mongoose from 'mongoose';
 import cors from 'cors';
+import path from 'path';
 import usuarioRoutes from './routes/usuarioRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
@@ -31,11 +32,25 @@ const io = new SocketIOServer(httpServer, {
 });
 
 ////////////////////// MIDDLEWARE CORS + JSON //////////////////////
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:4200',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
-app.use(express.json() as express.RequestHandler);
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+
+app.use('/uploads', (req, res, next) => {
+  logger.info(`📁 Archivo solicitado: ${req.url}`);
+  next();
+});
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+// Rutas de API
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
 app.use('/api/ratings', valoracionRoutes);
@@ -54,6 +69,7 @@ mongoose
     httpServer.listen(PORT, () => {
       logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
       logger.info(`Swagger docs en http://localhost:${PORT}/api-docs`);
+      logger.info(`📁 Archivos estáticos: ${path.join(__dirname, 'public', 'uploads')}`);
     });
   })
   .catch((err) => {

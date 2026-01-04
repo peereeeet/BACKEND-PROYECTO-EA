@@ -11,6 +11,8 @@ import {
   directResetPassword,
   addEventToUser,
   updateOwnProfile,
+  uploadProfilePhoto,
+  deleteProfilePhoto,
   loginUser,           
   createAdminUser,
   checkEmailExists,
@@ -30,11 +32,12 @@ import {
   getEventChatForEvent,
   postEventChatMessage,
   postHeartbeat,
-  loginWithGoogle 
+  loginWithGoogle
 } from '../controller/usuarioController';
 import { validateUserContent, validateMessageContent } from '../profanityMiddleware';
 import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
 import { registerValidation, updateProfileValidation } from '../userValidators';
+import { uploadProfilePhoto as uploadPhotoMiddleware } from '../config/uploadConfig';
 
 const router = Router();
 
@@ -216,6 +219,65 @@ router.put('/:id', authenticateadminToken, validateUserContent, updateUserById);
  *         description: Usuario no encontrado
  */
 router.put('/:id/self', authenticateOwner, validateUserContent, updateOwnProfile);
+
+/**
+ * @swagger
+ * /api/user/{id}/profile-photo:
+ *   post:
+ *     summary: Subir foto de perfil
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photo:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Foto de perfil subida exitosamente
+ *       400:
+ *         description: Error en la solicitud
+ *       403:
+ *         description: No autorizado
+ */
+router.post(
+  '/:id/profile-photo',
+  authenticateOwner,
+  uploadPhotoMiddleware.single('photo'),
+  uploadProfilePhoto
+);
+
+/**
+ * @swagger
+ * /api/user/{id}/profile-photo:
+ *   delete:
+ *     summary: Eliminar foto de perfil
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Foto de perfil eliminada exitosamente
+ *       403:
+ *         description: No autorizado
+ *       404:
+ *         description: Usuario no encontrado
+ */
+router.delete('/:id/profile-photo', authenticateOwner, deleteProfilePhoto);
 
 /**
  * @swagger

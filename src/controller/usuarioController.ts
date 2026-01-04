@@ -7,6 +7,8 @@ import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import { OAuth2Client } from 'google-auth-library';
+import path from 'path';
+import fs from 'fs';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');
@@ -48,6 +50,13 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
     if (!user) {
       logger.warn(`Intento de eliminación de usuario inexistente. ID: ${id}`);
       return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    if (user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '..', 'public', user.profilePhoto);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
 
     if (user.isGoogleUser) {
@@ -312,12 +321,113 @@ export async function updateUserById(
   }
 }
 
+export async function uploadProfilePhoto(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const authId = (req as any)?.user?.id;
+    const { id } = req.params;
+
+    if (!authId || authId !== id) {
+      logger.warn(`Intento no autorizado de subir foto: authId=${authId}, targetId=${id}`);
+      return res.status(403).json({ error: 'Solo puedes modificar tu propio perfil' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se proporcionó ningún archivo' });
+    }
+
+    const user = await Usuario.findById(id);
+    if (!user) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
+      const oldFilePath = path.join(__dirname, '..', 'public', user.profilePhoto);
+      if (fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath);
+      }
+    }
+
+    const photoUrl = `/uploads/profile-photos/${req.file.filename}`;
+    user.profilePhoto = photoUrl;
+    await user.save();
+
+    logger.info(`Foto de perfil actualizada para usuario ${id}`);
+    return res.status(200).json({
+      ok: true,
+      profilePhoto: photoUrl,
+      user: {
+        _id: user._id,
+        username: user.username,
+        gmail: user.gmail,
+        profilePhoto: user.profilePhoto,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error al subir foto de perfil: ${error}`);
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    return res.status(500).json({ error: 'Error al subir la foto de perfil' });
+  }
+}
+
+export async function deleteProfilePhoto(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const authId = (req as any)?.user?.id;
+    const { id } = req.params;
+
+    if (!authId || authId !== id) {
+      logger.warn(`Intento no autorizado de eliminar foto: authId=${authId}, targetId=${id}`);
+      return res.status(403).json({ error: 'Solo puedes modificar tu propio perfil' });
+    }
+
+    const user = await Usuario.findById(id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '..', 'public', user.profilePhoto);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    user.profilePhoto = undefined;
+    await user.save();
+
+    logger.info(`Foto de perfil eliminada para usuario ${id}`);
+    return res.status(200).json({
+      ok: true,
+      message: 'Foto de perfil eliminada correctamente',
+    });
+  } catch (error) {
+    logger.error(`Error al eliminar foto de perfil: ${error}`);
+    return res.status(500).json({ error: 'Error al eliminar la foto de perfil' });
+  }
+}
+
 export async function deleteUserById(
   req: Request,
   res: Response,
 ): Promise<Response> {
   try {
     const { id } = req.params;
+    const user = await Usuario.findById(id);
+    if (user && user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '..', 'public', user.profilePhoto);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
     const deletedUser = await userService.deleteUserById(id);
     if (!deletedUser) {
       logger.warn(`Usuario no encontrado en deleteUserById con ID: ${id}`);
@@ -871,3 +981,4 @@ export const postEventChatMessage = async (req: Request, res: Response) => {
       .json({ message: 'Error al procesar mensaje de evento' });
   }
 };
+

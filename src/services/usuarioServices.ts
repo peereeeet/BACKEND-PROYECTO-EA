@@ -186,11 +186,6 @@ export class UserService {
     await user.save();
   }
 
-  /**
-   * Busca un usuario por su ID y actualiza su estado a inactivo.
-   * @param id - El ID del usuario a deshabilitar.
-   * @returns El documento del usuario actualizado o null si no se encontró.
-   */
   async disableUser(id: string): Promise<IUsuario | null> {
     const user = await Usuario.findById(id);
     if (!user) {
@@ -219,7 +214,7 @@ export class UserService {
       .sort({ username: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select('_id username gmail online');
+      .select('_id username gmail online profilePhoto');
     return {
       data,
       page,
@@ -248,7 +243,7 @@ export class UserService {
       .sort({ username: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select('_id username gmail online');
+      .select('_id username gmail online profilePhoto');
 
     return {
       data,
@@ -407,13 +402,18 @@ export class UserService {
   }
 
   async getFriendRequests(userId: string) {
-    const user = await Usuario.findById(userId).populate(
-      'friendRequest',
-      'username gmail',
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID inválido');
+    }
+    const user = await Usuario.findById(userId).select('friendRequest');
+    if (!user) {
+      throw new Error('Usuario no encontrado');
+    }
+    const requestersIds = user.friendRequest;
+    const requesters = await Usuario.find({ _id: { $in: requestersIds } }).select(
+      '_id username gmail online profilePhoto',
     );
-    if (!user) throw new Error('Usuario no encontrado');
-    logger.info('Enviando solicitudes de amistad');
-    return user.friendRequest;
+    return requesters;
   }
 
   async getSentRequests(userId: string) {
@@ -422,7 +422,7 @@ export class UserService {
     }
 
     const user = await Usuario.findById(userId)
-      .populate('sentRequests', 'username gmail online')
+      .populate('sentRequests', 'username gmail online profilePhoto')
       .lean();
 
     if (!user) throw new Error('Usuario no encontrado');
@@ -432,6 +432,7 @@ export class UserService {
       username: u.username,
       gmail: u.gmail,
       isOnline: !!(u.online ?? u.isOnline),
+      profilePhoto: u.profilePhoto,
     }));
     return arr;
   }
