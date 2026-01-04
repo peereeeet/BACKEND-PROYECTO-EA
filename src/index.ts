@@ -1,5 +1,6 @@
-import express from 'express';
 import dotenv from 'dotenv';
+dotenv.config();
+import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import usuarioRoutes from './routes/usuarioRoutes';
@@ -17,20 +18,34 @@ import { logger } from './config/logger';
 import { ProfanityFilter } from './profanityFilter';
 
 // ----------- APP & SERVER ----------- //
-dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ----------- MIDDLEWARES ----------- //
-app.use(cors({
-  origin: [
-    'http://localhost:4200',
-    'http://localhost:8080',
-    'https://ea2.upc.edu',     // Front producción
-    'https://ea2-api.upc.edu' // Back producción
-  ],
-  credentials: true,
-}));
+const allowedOrigins = [
+  'https://ea2.upc.edu',
+  'https://ea2-api.upc.edu',
+  'http://localhost:4200',
+  'http://localhost:8080',
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        logger.warn({ origin }, 'Origen CORS no permitido');
+        callback(null, false);
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  }),
+);
 
 app.use(express.json());
 
@@ -38,7 +53,7 @@ app.use(express.json());
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ----------- DATABASE ----------- //
-const mongoURL = process.env.MONGO_URL || "mongodb://mongo:27017/BBDD";
+const mongoURL = process.env.MONGO_URL || 'mongodb://mongo:27017/BBDD';
 const usuarioServices = new UserService();
 
 // Crear servidor HTTP conjunto (API + WebSockets)
@@ -53,9 +68,9 @@ mongoose
     await usuarioServices.createAdminUser();
     await gamificacionService.inicializarInsignias();
 
-    httpServer.listen(PORT, () => {
-      logger.info(`Backend escuchando en http://localhost:${PORT}`);
-      logger.info(`Swagger en http://localhost:${PORT}/api-docs`);
+    httpServer.listen(PORT, '0.0.0.0' as any, () => {
+      logger.info(`Backend escuchando en http://0.0.0.0:${PORT}`);
+      logger.info(`Swagger en http://0.0.0.0:${PORT}/api-docs`);
     });
   })
   .catch((err) => {
@@ -72,10 +87,7 @@ app.use('/api/ai', aiRoutes);
 // ----------- SOCKET.IO ----------- //
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: [
-      'http://localhost:4200',
-      'https://ea2.upc.edu'
-    ],
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   },
@@ -169,32 +181,38 @@ io.on('connection', (socket) => {
     socket.join(getEventRoomId(eventId));
   });
 
-  socket.on('eventChat:message', async ({ eventId, userId, username, text }) => {
-    try {
-      if (!eventId || !userId || !username || !text?.trim()) return;
+  socket.on(
+    'eventChat:message',
+    async ({ eventId, userId, username, text }) => {
+      try {
+        if (!eventId || !userId || !username || !text?.trim()) return;
 
-      // Filtro de obscenidades
-      const profanityResult = ProfanityFilter.check(text);
-      if (!profanityResult.isClean) {
-        socket.emit('chat:error', {
-          message: ProfanityFilter.getErrorMessage(
-            profanityResult.foundWords,
-            'es',
-          ),
-          code: 'INAPPROPRIATE_CONTENT',
-        });
-        return;
+        // Filtro de obscenidades
+        const profanityResult = ProfanityFilter.check(text);
+        if (!profanityResult.isClean) {
+          socket.emit('chat:error', {
+            message: ProfanityFilter.getErrorMessage(
+              profanityResult.foundWords,
+              'es',
+            ),
+            code: 'INAPPROPRIATE_CONTENT',
+          });
+          return;
+        }
+
+        const msg = await usuarioServices.addEventChatMessage(
+          eventId,
+          userId,
+          username,
+          text.trim(),
+        );
+
+        io.to(getEventRoomId(eventId)).emit('eventChat:message', msg);
+      } catch (err) {
+        logger.error(`Error en eventChat:message: ${err}`);
       }
-
-      const msg = await usuarioServices.addEventChatMessage(
-        eventId, userId, username, text.trim()
-      );
-
-      io.to(getEventRoomId(eventId)).emit('eventChat:message', msg);
-    } catch (err) {
-      logger.error(`Error en eventChat:message: ${err}`);
-    }
-  });
+    },
+  );
 });
 
 export { io };
