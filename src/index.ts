@@ -13,10 +13,13 @@ import valoracionRoutes from './routes/valoracionRoutes';
 import gamificacionRoutes from './routes/gamificacionRoutes';
 import gamificacionService from './services/gamificacionServices';
 import aiRoutes from './routes/aiRoutes';
+import notificacionRoutes from './routes/notificacionRoutes';
+import notificacionService from './services/notificacionServices';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { logger } from './config/logger';
 import { ProfanityFilter } from './profanityFilter';
+import Usuario from './models/usuario';
 
 const app = express();
 const PORT = 3000;
@@ -44,7 +47,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 app.use('/uploads', (req, res, next) => {
-  logger.info(`📁 Archivo solicitado: ${req.url}`);
+  logger.info(`📂 Archivo solicitado: ${req.url}`);
   next();
 });
 
@@ -56,6 +59,7 @@ app.use('/api/event', eventoRoutes);
 app.use('/api/ratings', valoracionRoutes);
 app.use('/api/gamificacion', gamificacionRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/notificaciones', notificacionRoutes);
 
 ////////////////////// CONEXIÓN A BBDD //////////////////////
 mongoose
@@ -69,7 +73,7 @@ mongoose
     httpServer.listen(PORT, () => {
       logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
       logger.info(`Swagger docs en http://localhost:${PORT}/api-docs`);
-      logger.info(`📁 Archivos estáticos: ${path.join(__dirname, 'public', 'uploads')}`);
+      logger.info(`📂 Archivos estáticos: ${path.join(__dirname, 'public', 'uploads')}`);
     });
   })
   .catch((err) => {
@@ -96,6 +100,7 @@ io.on('connection', (socket) => {
       data.userId = userId;
 
       socket.join(`user:${userId}`);
+      logger.info(`🔔 Usuario ${userId} unido a room: user:${userId}`);
 
       await usuarioServices.setUserOnline(userId);
 
@@ -125,6 +130,7 @@ io.on('connection', (socket) => {
       if (!payload?.userId || !payload?.friendId) return;
       const roomId = getChatRoomId(payload.userId, payload.friendId);
       socket.join(roomId);
+      logger.info(`💬 Usuario ${payload.userId} unido a chat room: ${roomId}`);
     } catch (err) {
       logger.error(`Error en chat:join: ${err}`);
     }
@@ -149,16 +155,54 @@ io.on('connection', (socket) => {
           return;
         }
 
-        const msg = {
-          _id: new mongoose.Types.ObjectId().toString(),
-          from,
-          to,
-          text: text.trim(),
-          createdAt: new Date(),
-        };
+        try {
+          const savedMessage = await usuarioServices.addChatMessage(from, to, text.trim());
+          const msg = {
+            _id: String((savedMessage as any)._id),
+            from: savedMessage.from,
+            to: savedMessage.to,
+            text: savedMessage.text,
+            createdAt: savedMessage.createdAt,
+          };
 
-        const roomId = getChatRoomId(from, to);
-        io.to(roomId).emit('chat:message', msg);
+          const roomId = getChatRoomId(from, to);
+          io.to(roomId).emit('chat:message', msg);
+          
+          logger.info(`💬 Mensaje guardado: ${from} → ${to}`);
+
+          try {
+            const fromUser = await Usuario.findById(from).select('username').lean();
+            if (fromUser) {
+              logger.info(`📬 Creando notificación de mensaje: ${fromUser.username} → ${to}`);
+              
+              const notificacion = await notificacionService.notifyNewMessage(
+                to,
+                from,
+                fromUser.username
+              );
+
+              if (notificacion) {
+                logger.info(`✅ Notificación creada y enviada via Socket.IO a user:${to}`);
+              } else {
+                logger.error(`❌ No se pudo crear la notificación de mensaje`);
+              }
+            }
+          } catch (notifError) {
+            logger.error(`❌ Error al enviar notificación de mensaje: ${notifError}`);
+          }
+
+        } catch (saveError) {
+          logger.error(`Error al guardar mensaje: ${saveError}`);
+          const msg = {
+            _id: new mongoose.Types.ObjectId().toString(),
+            from,
+            to,
+            text: text.trim(),
+            createdAt: new Date(),
+          };
+          const roomId = getChatRoomId(from, to);
+          io.to(roomId).emit('chat:message', msg);
+        }
       } catch (err) {
         logger.error(`Error en chat:message: ${err}`);
       }
@@ -174,6 +218,7 @@ io.on('connection', (socket) => {
       if (!payload?.eventId) return;
       const roomId = getEventRoomId(payload.eventId);
       socket.join(roomId);
+      logger.info(`🎉 Usuario unido a event chat room: ${roomId}`);
     } catch (err) {
       logger.error(`Error en eventChat:join: ${err}`);
     }
@@ -203,17 +248,40 @@ io.on('connection', (socket) => {
           return;
         }
 
-        const msg = {
-          _id: new mongoose.Types.ObjectId().toString(),
-          eventId,
-          userId,
-          username,
-          text: text.trim(),
-          createdAt: new Date(),
-        };
+        try {
+          const savedMessage = await usuarioServices.addEventChatMessage(
+            eventId,
+            userId,
+            username,
+            text.trim()
+          );
 
-        const roomId = getEventRoomId(eventId);
-        io.to(roomId).emit('eventChat:message', msg);
+          const msg = {
+            _id: String((savedMessage as any)._id),
+            eventId: savedMessage.eventId,
+            userId: savedMessage.userId,
+            username: savedMessage.username,
+            text: savedMessage.text,
+            createdAt: savedMessage.createdAt,
+          };
+
+          const roomId = getEventRoomId(eventId);
+          io.to(roomId).emit('eventChat:message', msg);
+          
+          logger.info(`🎉 Mensaje de evento guardado: ${username} en ${eventId}`);
+        } catch (saveError) {
+          logger.error(`Error al guardar mensaje de evento: ${saveError}`);
+          const msg = {
+            _id: new mongoose.Types.ObjectId().toString(),
+            eventId,
+            userId,
+            username,
+            text: text.trim(),
+            createdAt: new Date(),
+          };
+          const roomId = getEventRoomId(eventId);
+          io.to(roomId).emit('eventChat:message', msg);
+        }
       } catch (err) {
         logger.error(`Error en eventChat:message: ${err}`);
       }

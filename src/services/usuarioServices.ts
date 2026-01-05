@@ -12,12 +12,23 @@ import {
 } from '../models/usuario';
 import { io } from '../index';
 import gamificacionService from './gamificacionServices';
+import notificacionService from './notificacionServices';
+
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
 
 function oid(id: string): Types.ObjectId {
   if (!Types.ObjectId.isValid(id)) {
     throw new Error(`INVALID_OBJECT_ID:${id}`);
   }
   return new Types.ObjectId(id);
+}
+
+function transformProfilePhotoUrl(photoPath: string | null | undefined): string | null {
+  if (!photoPath) return null;
+  if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
+    return photoPath;
+  }
+  return `${SERVER_URL}${photoPath}`;
 }
 
 export class UserService {
@@ -147,7 +158,6 @@ export class UserService {
     }
   }
 
-  /* Create default admin user */
   async createAdminUser(): Promise<void> {
     try {
       const adminExists = await Usuario.findOne({ username: 'admin' });
@@ -210,11 +220,18 @@ export class UserService {
       ];
     }
     const totalItems = await Usuario.countDocuments(filter);
-    const data = await Usuario.find(filter)
+    const rawData = await Usuario.find(filter)
       .sort({ username: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select('_id username gmail online profilePhoto');
+      .select('_id username gmail online profilePhoto')
+      .lean();
+    
+    const data = rawData.map((user: any) => ({
+      ...user,
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto)
+    }));
+    
     return {
       data,
       page,
@@ -239,11 +256,17 @@ export class UserService {
     }
 
     const totalItems = await Usuario.countDocuments(filter);
-    const data = await Usuario.find(filter)
+    const rawData = await Usuario.find(filter)
       .sort({ username: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select('_id username gmail online profilePhoto');
+      .select('_id username gmail online profilePhoto')
+      .lean();
+
+    const data = rawData.map((user: any) => ({
+      ...user,
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto)
+    }));
 
     return {
       data,
@@ -315,6 +338,12 @@ export class UserService {
       fromGmail: from.gmail,
     });
 
+    await notificacionService.notifyFriendRequest(
+      toId,
+      fromId,
+      from.username
+    );
+
     return {
       ok: true,
       message: 'Solicitud enviada',
@@ -376,6 +405,13 @@ export class UserService {
       logger.error(`Error al otorgar puntos por amistad: ${err}`);
     }
 
+    const userInfo = await Usuario.findById(userId).select('username').lean();
+    await notificacionService.notifyFriendAccepted(
+      requesterId,
+      userId,
+      userInfo?.username || 'Usuario'
+    );
+
     return { message: 'Solicitud aceptada correctamente' };
   }
 
@@ -410,9 +446,15 @@ export class UserService {
       throw new Error('Usuario no encontrado');
     }
     const requestersIds = user.friendRequest;
-    const requesters = await Usuario.find({ _id: { $in: requestersIds } }).select(
-      '_id username gmail online profilePhoto',
-    );
+    const rawRequesters = await Usuario.find({ _id: { $in: requestersIds } })
+      .select('_id username gmail online profilePhoto')
+      .lean();
+    
+    const requesters = rawRequesters.map((user: any) => ({
+      ...user,
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto)
+    }));
+    
     return requesters;
   }
 
@@ -432,7 +474,7 @@ export class UserService {
       username: u.username,
       gmail: u.gmail,
       isOnline: !!(u.online ?? u.isOnline),
-      profilePhoto: u.profilePhoto,
+      profilePhoto: transformProfilePhotoUrl(u.profilePhoto),
     }));
     return arr;
   }
@@ -523,10 +565,25 @@ export class UserService {
   }
 
   async getChatBetween(
-    _userId: string,
-    _friendId: string,
+    userId: string,
+    friendId: string,
   ): Promise<IChatMessage[]> {
-    return [];
+    try {
+      const messages = await ChatMessageModel.find({
+        $or: [
+          { from: userId, to: friendId },
+          { from: friendId, to: userId }
+        ]
+      })
+        .sort({ createdAt: 1 })
+        .lean();
+
+      logger.info(`Chat entre ${userId} y ${friendId}: ${messages.length} mensajes`);
+      return messages;
+    } catch (error) {
+      logger.error(`Error al obtener chat: ${error}`);
+      return [];
+    }
   }
 
   async addChatMessage(
@@ -534,11 +591,36 @@ export class UserService {
     to: string,
     text: string,
   ): Promise<IChatMessage> {
-    return new ChatMessageModel({ from, to, text });
+    try {
+      const message = new ChatMessageModel({ 
+        from, 
+        to, 
+        text,
+        createdAt: new Date()
+      });
+      
+      await message.save();
+      
+      logger.info(`Mensaje guardado: ${from} → ${to}`);
+      return message;
+    } catch (error) {
+      logger.error(`Error al guardar mensaje: ${error}`);
+      throw error;
+    }
   }
 
-  async getEventChat(_eventId: string): Promise<IEventChatMessage[]> {
-    return [];
+  async getEventChat(eventId: string): Promise<IEventChatMessage[]> {
+    try {
+      const messages = await EventChatMessageModel.find({ eventId })
+        .sort({ createdAt: 1 })
+        .lean();
+
+      logger.info(`Chat del evento ${eventId}: ${messages.length} mensajes`);
+      return messages;
+    } catch (error) {
+      logger.error(`Error al obtener chat del evento: ${error}`);
+      return [];
+    }
   }
 
   async addEventChatMessage(
@@ -547,7 +629,23 @@ export class UserService {
     username: string,
     text: string,
   ): Promise<IEventChatMessage> {
-    return new EventChatMessageModel({ eventId, userId, username, text });
+    try {
+      const message = new EventChatMessageModel({ 
+        eventId, 
+        userId, 
+        username, 
+        text,
+        createdAt: new Date()
+      });
+      
+      await message.save();
+      
+      logger.info(`Mensaje de evento guardado: ${username} en ${eventId}`);
+      return message;
+    } catch (error) {
+      logger.error(`Error al guardar mensaje de evento: ${error}`);
+      throw error;
+    }
   }
 }
 
