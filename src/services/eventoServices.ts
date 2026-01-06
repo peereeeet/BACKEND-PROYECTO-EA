@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import axios from 'axios';
 import { logger } from '../config/logger';
 import gamificacionService from './gamificacionServices';
+import notificacionService from './notificacionServices';
+import Usuario from '../models/usuario';
 
 export class EventoService {
   async createEvento(data: Partial<IEvento>): Promise<IEvento> {
@@ -215,6 +217,12 @@ export class EventoService {
       } catch (err) {
         logger.error(`Error al otorgar puntos por unirse a evento: ${err}`);
       }
+
+      try {
+        await this.notificarCreadorSiEsAmigo(eventoActualizado, userId);
+      } catch (err) {
+        logger.error(`Error al enviar notificación al creador: ${err}`);
+      }
     }
 
     return {
@@ -222,6 +230,63 @@ export class EventoService {
       enListaEspera: false,
       mensaje: 'Te has unido al evento correctamente',
     };
+  }
+
+  private async notificarCreadorSiEsAmigo(
+    evento: IEvento,
+    userId: string
+  ): Promise<void> {
+    try {
+      let creadorId: string;
+      if (evento.creador && typeof evento.creador === 'object' && '_id' in evento.creador) {
+        creadorId = (evento.creador as any)._id.toString();
+      } else {
+        creadorId = (evento.creador as Types.ObjectId).toString();
+      }
+
+      if (creadorId === userId) {
+        logger.info(`Usuario ${userId} es el creador, no se envía notificación`);
+        return;
+      }
+
+      const creador = await Usuario.findById(creadorId).select('friends').lean();
+      
+      if (!creador) {
+        logger.warn(`Creador ${creadorId} no encontrado para notificación`);
+        return;
+      }
+
+      const sonAmigos = creador.friends?.some((friendId: any) => {
+        const id = typeof friendId === 'object' && friendId._id 
+          ? friendId._id.toString() 
+          : friendId.toString();
+        return id === userId;
+      });
+
+      if (!sonAmigos) {
+        logger.info(`Usuario ${userId} no es amigo del creador ${creadorId}, no se envía notificación`);
+        return;
+      }
+
+      const usuario = await Usuario.findById(userId).select('username').lean();
+      
+      if (!usuario) {
+        logger.warn(`Usuario ${userId} no encontrado para notificación`);
+        return;
+      }
+
+      await notificacionService.notifyFriendJoinedEvent(
+        creadorId,
+        userId,
+        usuario.username,
+        evento._id.toString(),
+        evento.name
+      );
+
+      logger.info(`✅ Notificación enviada: ${usuario.username} se unió al evento "${evento.name}" de su amigo`);
+    } catch (error) {
+      logger.error(`Error en notificarCreadorSiEsAmigo: ${error}`);
+    }
   }
 
   async leaveEvento(
