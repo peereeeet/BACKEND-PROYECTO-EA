@@ -349,6 +349,17 @@ export class EventoService {
         logger.error(`Error al otorgar puntos: ${err}`);
       }
 
+      try {
+        await notificacionService.notifySpotAvailable(
+          siguienteUserId.toString(),
+          evento._id.toString(),
+          evento.name
+        );
+        logger.info(`✅ Notificación de plaza disponible enviada a ${siguienteUserId}`);
+      } catch (err) {
+        logger.error(`Error al enviar notificación de plaza disponible: ${err}`);
+      }
+
       if (io) {
         io.to(`user:${siguienteUserId}`).emit('evento:plazaDisponible', {
           eventoId: evento._id.toString(),
@@ -362,7 +373,6 @@ export class EventoService {
       );
     }
   }
-
   async leaveWaitlist(
     eventoId: string,
     userId: string,

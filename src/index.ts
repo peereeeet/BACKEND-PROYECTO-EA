@@ -20,6 +20,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { logger } from './config/logger';
 import { ProfanityFilter } from './profanityFilter';
 import Usuario from './models/usuario';
+import Evento from './models/evento';
 
 const app = express();
 const PORT = 3000;
@@ -61,6 +62,54 @@ app.use('/api/gamificacion', gamificacionRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/notificaciones', notificacionRoutes);
 
+async function checkEventReminders() {
+  try {
+    const now = new Date();
+    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+    const upcomingEvents = await Evento.find({
+      schedule: {
+        $gte: in24Hours,
+        $lt: in25Hours
+      }
+    }).populate('participantes', '_id username').lean();
+
+    logger.info(`🔔 Revisando recordatorios: ${upcomingEvents.length} eventos encontrados`);
+
+    for (const evento of upcomingEvents) {
+      const participantes = evento.participantes as any[];
+      
+      for (const participante of participantes) {
+        if (participante && participante._id) {
+          try {
+            await notificacionService.notifyEventReminder(
+              participante._id.toString(),
+              evento._id.toString(),
+              evento.name,
+              new Date(evento.schedule)
+            );
+            logger.info(`✅ Recordatorio enviado a ${participante.username} para evento "${evento.name}"`);
+          } catch (err) {
+            logger.error(`❌ Error enviando recordatorio a ${participante._id}: ${String(err)}`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    logger.error(`❌ Error en checkEventReminders: ${String(error)}`);
+  }
+}
+
+async function cleanupOldNotificaciones() {
+  try {
+    const deleted = await notificacionService.deleteOldNotificaciones();
+    logger.info(`🗑️ Limpieza automática: ${deleted} notificaciones antiguas eliminadas`);
+  } catch (error) {
+    logger.error(`❌ Error en limpieza de notificaciones: ${String(error)}`);
+  }
+}
+
 ////////////////////// CONEXIÓN A BBDD //////////////////////
 mongoose
   .connect('mongodb://localhost:27017/BBDD')
@@ -69,6 +118,14 @@ mongoose
 
     await usuarioServices.createAdminUser();
     await gamificacionService.inicializarInsignias();
+
+    setInterval(checkEventReminders, 60 * 60 * 1000);
+    logger.info('⏰ Cron job de recordatorios de eventos iniciado (cada 1 hora)');
+    checkEventReminders();
+
+    setInterval(cleanupOldNotificaciones, 24 * 60 * 60 * 1000);
+    logger.info('🗑️ Cron job de limpieza de notificaciones iniciado (cada 24 horas)');
+    cleanupOldNotificaciones();
 
     httpServer.listen(PORT, () => {
       logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
@@ -100,7 +157,6 @@ io.on('connection', (socket) => {
       data.userId = userId;
 
       socket.join(`user:${userId}`);
-      logger.info(`🔔 Usuario ${userId} unido a room: user:${userId}`);
 
       await usuarioServices.setUserOnline(userId);
 
@@ -170,25 +226,32 @@ io.on('connection', (socket) => {
           
           logger.info(`💬 Mensaje guardado: ${from} → ${to}`);
 
-          try {
-            const fromUser = await Usuario.findById(from).select('username').lean();
-            if (fromUser) {
-              logger.info(`📬 Creando notificación de mensaje: ${fromUser.username} → ${to}`);
-              
-              const notificacion = await notificacionService.notifyNewMessage(
-                to,
-                from,
-                fromUser.username
-              );
+          const chatRoom = io.sockets.adapter.rooms.get(roomId);
+          const recipientInChat = chatRoom && Array.from(chatRoom).some(socketId => {
+            const s = io.sockets.sockets.get(socketId);
+            const data = s?.data as SocketData;
+            return data?.userId === to;
+          });
 
-              if (notificacion) {
-                logger.info(`✅ Notificación creada y enviada via Socket.IO a user:${to}`);
-              } else {
-                logger.error(`❌ No se pudo crear la notificación de mensaje`);
+          if (!recipientInChat) {
+            try {
+              const fromUser = await Usuario.findById(from).select('username').lean();
+              if (fromUser) {
+                const notificacion = await notificacionService.notifyNewMessage(
+                  to,
+                  from,
+                  fromUser.username
+                );
+
+                if (notificacion) {
+                  logger.info(`✅ Notificación creada y enviada via Socket.IO a user:${to}`);
+                } else {
+                  logger.error(`❌ No se pudo crear la notificación de mensaje`);
+                }
               }
+            } catch (notifError) {
+              logger.error(`❌ Error al enviar notificación de mensaje: ${notifError}`);
             }
-          } catch (notifError) {
-            logger.error(`❌ Error al enviar notificación de mensaje: ${notifError}`);
           }
 
         } catch (saveError) {

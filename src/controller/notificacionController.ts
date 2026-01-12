@@ -72,6 +72,31 @@ export const markAllAsRead = async (req: Request, res: Response) => {
   }
 };
 
+export const markRelatedAsRead = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { relatedId, type } = req.body;
+
+    if (!relatedId || !type || (type !== 'user' && type !== 'event')) {
+      return res.status(400).json({ 
+        ok: false, 
+        message: 'Parámetros inválidos. Se requiere relatedId y type (user o event)' 
+      });
+    }
+
+    const count = await notificacionService.markRelatedAsRead(userId, relatedId, type);
+    
+    return res.status(200).json({ 
+      ok: true, 
+      message: `${count} notificaciones marcadas como leídas automáticamente`,
+      count 
+    });
+  } catch (error) {
+    logger.error(`Error en markRelatedAsRead: ${error}`);
+    return res.status(500).json({ ok: false, message: 'Error al marcar notificaciones relacionadas' });
+  }
+};
+
 export const deleteNotificacion = async (req: Request, res: Response) => {
   try {
     const { notificacionId } = req.params;

@@ -3,7 +3,7 @@ import { Schema, model, Types, Document } from 'mongoose';
 export interface INotificacion extends Document {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
-  type: 'friend_request' | 'friend_accepted' | 'event_join' | 'event_reminder' | 'new_message';
+  type: 'friend_request' | 'friend_accepted' | 'event_join' | 'event_reminder' | 'new_message' | 'event_spot_available';
   title: string;
   message: string;
   relatedUserId?: Types.ObjectId;
@@ -20,7 +20,7 @@ const notificacionSchema = new Schema<INotificacion>({
   type: { 
     type: String, 
     required: true,
-    enum: ['friend_request', 'friend_accepted', 'event_join', 'event_reminder', 'new_message'],
+    enum: ['friend_request', 'friend_accepted', 'event_join', 'event_reminder', 'new_message', 'event_spot_available'],
     index: true
   },
   title: { type: String, required: true },
@@ -38,6 +38,7 @@ const notificacionSchema = new Schema<INotificacion>({
 });
 
 notificacionSchema.index({ userId: 1, read: 1, createdAt: -1 });
+notificacionSchema.index({ userId: 1, type: 1 });
 
 export const Notificacion = model<INotificacion>('Notificacion', notificacionSchema);
 export default Notificacion;

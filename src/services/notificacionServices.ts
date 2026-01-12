@@ -4,9 +4,26 @@ import { logger } from '../config/logger';
 import { io } from '../index';
 
 export class NotificacionService {
+  private async checkRateLimit(userId: string, type: string, maxPerHour: number = 10): Promise<boolean> {
+    try {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      
+      const recentCount = await Notificacion.countDocuments({
+        userId: new Types.ObjectId(userId),
+        type: type,
+        createdAt: { $gte: oneHourAgo }
+      });
+
+      return recentCount < maxPerHour;
+    } catch (error) {
+      logger.error(`Error verificando rate limit: ${error}`);
+      return true;
+    }
+  }
+
   async createNotificacion(data: {
     userId: string;
-    type: 'friend_request' | 'friend_accepted' | 'event_join' | 'event_reminder' | 'new_message';
+    type: 'friend_request' | 'friend_accepted' | 'event_join' | 'event_reminder' | 'new_message' | 'event_spot_available';
     title: string;
     message: string;
     relatedUserId?: string;
@@ -14,8 +31,17 @@ export class NotificacionService {
     relatedUsername?: string;
     relatedEventName?: string;
     actionUrl?: string;
+    skipRateLimit?: boolean;
   }): Promise<INotificacion | null> {
     try {
+      if (!data.skipRateLimit && data.type !== 'event_reminder') {
+        const allowed = await this.checkRateLimit(data.userId, data.type);
+        if (!allowed) {
+          logger.warn(`Rate limit excedido para usuario ${data.userId}, tipo ${data.type}`);
+          return null;
+        }
+      }
+
       const notificacion = new Notificacion({
         userId: new Types.ObjectId(data.userId),
         type: data.type,
@@ -146,6 +172,32 @@ export class NotificacionService {
     }
   }
 
+  async markRelatedAsRead(userId: string, relatedId: string, type: 'user' | 'event'): Promise<number> {
+    try {
+      const query: any = {
+        userId: new Types.ObjectId(userId),
+        read: false
+      };
+
+      if (type === 'user') {
+        query.relatedUserId = new Types.ObjectId(relatedId);
+      } else if (type === 'event') {
+        query.relatedEventId = new Types.ObjectId(relatedId);
+      }
+
+      const result = await Notificacion.updateMany(query, { $set: { read: true } });
+      
+      if (result.modifiedCount > 0) {
+        logger.info(`${result.modifiedCount} notificaciones marcadas como leídas automáticamente`);
+      }
+      
+      return result.modifiedCount;
+    } catch (error) {
+      logger.error(`Error al marcar notificaciones relacionadas: ${error}`);
+      return 0;
+    }
+  }
+
   async notifyFriendRequest(targetUserId: string, fromUserId: string, fromUsername: string) {
     return this.createNotificacion({
       userId: targetUserId,
@@ -192,7 +244,8 @@ export class NotificacionService {
       message: `Tu evento "${eventName}" comienza mañana a las ${eventDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
       relatedEventId: eventId,
       relatedEventName: eventName,
-      actionUrl: `/evento/${eventId}`
+      actionUrl: `/evento/${eventId}`,
+      skipRateLimit: true
     });
   }
 
@@ -205,6 +258,19 @@ export class NotificacionService {
       relatedUserId: fromUserId,
       relatedUsername: fromUsername,
       actionUrl: '/menu'
+    });
+  }
+
+  async notifySpotAvailable(userId: string, eventId: string, eventName: string) {
+    return this.createNotificacion({
+      userId: userId,
+      type: 'event_spot_available',
+      title: 'Plaza disponible',
+      message: `Hay una plaza disponible en "${eventName}". ¡Ya estás inscrito!`,
+      relatedEventId: eventId,
+      relatedEventName: eventName,
+      actionUrl: `/evento/${eventId}`,
+      skipRateLimit: true
     });
   }
 }

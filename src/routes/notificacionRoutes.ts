@@ -5,6 +5,7 @@ import {
   getUnreadCount,
   markAsRead,
   markAllAsRead,
+  markRelatedAsRead,
   deleteNotificacion
 } from '../controller/notificacionController';
 import { authenticateToken } from '../auth/middleware';
@@ -69,6 +70,35 @@ router.patch('/:notificacionId/read', authenticateToken, markAsRead);
  *     tags: [Notificaciones]
  */
 router.patch('/:userId/read-all', authenticateToken, markAllAsRead);
+
+/**
+ * @swagger
+ * /api/notificaciones/{userId}/mark-related:
+ *   patch:
+ *     summary: Marcar notificaciones relacionadas como leídas automáticamente
+ *     tags: [Notificaciones]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               relatedId:
+ *                 type: string
+ *                 description: ID del usuario o evento relacionado
+ *               type:
+ *                 type: string
+ *                 enum: [user, event]
+ *                 description: Tipo de relación (user para chats, event para eventos)
+ */
+router.patch('/:userId/mark-related', authenticateToken, markRelatedAsRead);
 
 /**
  * @swagger
