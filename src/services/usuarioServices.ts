@@ -23,7 +23,9 @@ function oid(id: string): Types.ObjectId {
   return new Types.ObjectId(id);
 }
 
-function transformProfilePhotoUrl(photoPath: string | null | undefined): string | null {
+function transformProfilePhotoUrl(
+  photoPath: string | null | undefined,
+): string | null {
   if (!photoPath) return null;
   if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
     return photoPath;
@@ -226,12 +228,12 @@ export class UserService {
       .limit(limit)
       .select('_id username gmail online profilePhoto')
       .lean();
-    
+
     const data = rawData.map((user: any) => ({
       ...user,
-      profilePhoto: transformProfilePhotoUrl(user.profilePhoto)
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto),
     }));
-    
+
     return {
       data,
       page,
@@ -265,7 +267,7 @@ export class UserService {
 
     const data = rawData.map((user: any) => ({
       ...user,
-      profilePhoto: transformProfilePhotoUrl(user.profilePhoto)
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto),
     }));
 
     return {
@@ -338,11 +340,7 @@ export class UserService {
       fromGmail: from.gmail,
     });
 
-    await notificacionService.notifyFriendRequest(
-      toId,
-      fromId,
-      from.username
-    );
+    await notificacionService.notifyFriendRequest(toId, fromId, from.username);
 
     return {
       ok: true,
@@ -409,7 +407,7 @@ export class UserService {
     await notificacionService.notifyFriendAccepted(
       requesterId,
       userId,
-      userInfo?.username || 'Usuario'
+      userInfo?.username || 'Usuario',
     );
 
     return { message: 'Solicitud aceptada correctamente' };
@@ -449,12 +447,12 @@ export class UserService {
     const rawRequesters = await Usuario.find({ _id: { $in: requestersIds } })
       .select('_id username gmail online profilePhoto')
       .lean();
-    
+
     const requesters = rawRequesters.map((user: any) => ({
       ...user,
-      profilePhoto: transformProfilePhotoUrl(user.profilePhoto)
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto),
     }));
-    
+
     return requesters;
   }
 
@@ -572,13 +570,15 @@ export class UserService {
       const messages = await ChatMessageModel.find({
         $or: [
           { from: userId, to: friendId },
-          { from: friendId, to: userId }
-        ]
+          { from: friendId, to: userId },
+        ],
       })
         .sort({ createdAt: 1 })
         .lean();
 
-      logger.info(`Chat entre ${userId} y ${friendId}: ${messages.length} mensajes`);
+      logger.info(
+        `Chat entre ${userId} y ${friendId}: ${messages.length} mensajes`,
+      );
       return messages;
     } catch (error) {
       logger.error(`Error al obtener chat: ${error}`);
@@ -592,15 +592,15 @@ export class UserService {
     text: string,
   ): Promise<IChatMessage> {
     try {
-      const message = new ChatMessageModel({ 
-        from, 
-        to, 
+      const message = new ChatMessageModel({
+        from,
+        to,
         text,
-        createdAt: new Date()
+        createdAt: new Date(),
       });
-      
+
       await message.save();
-      
+
       logger.info(`Mensaje guardado: ${from} → ${to}`);
       return message;
     } catch (error) {
@@ -630,22 +630,73 @@ export class UserService {
     text: string,
   ): Promise<IEventChatMessage> {
     try {
-      const message = new EventChatMessageModel({ 
-        eventId, 
-        userId, 
-        username, 
+      const message = new EventChatMessageModel({
+        eventId,
+        userId,
+        username,
         text,
-        createdAt: new Date()
+        createdAt: new Date(),
       });
-      
+
       await message.save();
-      
+
       logger.info(`Mensaje de evento guardado: ${username} en ${eventId}`);
       return message;
     } catch (error) {
       logger.error(`Error al guardar mensaje de evento: ${error}`);
       throw error;
     }
+  }
+
+  async blockUser(userId: string, blockId: string) {
+    if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(blockId)) {
+      throw new Error('Invalid user id');
+    }
+    if (userId === blockId) throw new Error('No puedes bloquearte a ti mismo');
+
+    // Desvincular amistades y solicitudes en ambos sentidos
+    await this.unlinkFriendsBothWays(userId, blockId);
+
+    // Añadir a la lista de bloqueados DEL usuario que bloquea
+    await Usuario.findByIdAndUpdate(userId, {
+      $addToSet: { blockedUsers: new Types.ObjectId(blockId) },
+    });
+
+    logger.info(`Usuario ${userId} bloqueó a ${blockId}`);
+    return { ok: true, message: 'Usuario bloqueado correctamente' };
+  }
+
+  async unblockUser(userId: string, unblockId: string) {
+    if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(unblockId)) {
+      throw new Error('Invalid user id');
+    }
+
+    await Usuario.findByIdAndUpdate(userId, {
+      $pull: { blockedUsers: new Types.ObjectId(unblockId) },
+    });
+
+    logger.info(`Usuario ${userId} desbloqueó a ${unblockId}`);
+    return { ok: true, message: 'Usuario desbloqueado correctamente' };
+  }
+
+  async getBlockedUsers(userId: string) {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID inválido');
+    }
+    const user = await Usuario.findById(userId).select('blockedUsers');
+    if (!user) throw new Error('Usuario no encontrado');
+
+    const blockedIds = user.blockedUsers || [];
+    const rawBlocked = await Usuario.find({ _id: { $in: blockedIds } })
+      .select('_id username gmail online profilePhoto')
+      .lean();
+
+    const data = rawBlocked.map((u: any) => ({
+      ...u,
+      profilePhoto: transformProfilePhotoUrl(u.profilePhoto),
+    }));
+
+    return data;
   }
 }
 
