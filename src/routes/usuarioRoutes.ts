@@ -13,30 +13,41 @@ import {
   updateOwnProfile,
   uploadProfilePhoto,
   deleteProfilePhoto,
-  loginUser,           
+  loginUser,
   createAdminUser,
   checkEmailExists,
   checkUsernameExists,
-  disableUser,    
-  refreshToken,   
+  disableUser,
+  refreshToken,
   updateUserRole,
   sendFriendRequest,
   getSentRequests,
   acceptFriendRequest,
   rejectFriendRequest,
-  getFriendRequests, 
+  getFriendRequests,
   listFriends,
   removeFriendBoth,
-  getChatBetween, 
+  getChatBetween,
   postChatMessage,
   getEventChatForEvent,
   postEventChatMessage,
   postHeartbeat,
-  loginWithGoogle
+  loginWithGoogle,
+  blockUser,
+  unblockUser,
+  getBlockedUsers,
 } from '../controller/usuarioController';
-import { validateUserContent, validateMessageContent } from '../profanityMiddleware';
-import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
-import { registerValidation, updateProfileValidation } from '../userValidators';
+import {
+  validateUserContent,
+  validateMessageContent,
+} from '../profanityMiddleware';
+import {
+  authenticateToken,
+  authenticateadminToken,
+  authenticateOwner,
+  authenticateRefreshToken,
+} from '../auth/middleware';
+import { registerValidation } from '../userValidators';
 import { uploadProfilePhoto as uploadPhotoMiddleware } from '../config/uploadConfig';
 
 const router = Router();
@@ -218,7 +229,12 @@ router.put('/:id', authenticateadminToken, validateUserContent, updateUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.put('/:id/self', authenticateOwner, validateUserContent, updateOwnProfile);
+router.put(
+  '/:id/self',
+  authenticateOwner,
+  validateUserContent,
+  updateOwnProfile,
+);
 
 /**
  * @swagger
@@ -254,7 +270,7 @@ router.post(
   '/:id/profile-photo',
   authenticateOwner,
   uploadPhotoMiddleware.single('photo'),
-  uploadProfilePhoto
+  uploadProfilePhoto,
 );
 
 /**
@@ -298,7 +314,7 @@ router.delete('/:id/profile-photo', authenticateOwner, deleteProfilePhoto);
  *       404:
  *         description: Usuario no encontrado
  */
-router.delete('/:id',authenticateadminToken, deleteUserById);
+router.delete('/:id', authenticateadminToken, deleteUserById);
 
 /**
  * @swagger
@@ -333,7 +349,11 @@ router.delete('/:id',authenticateadminToken, deleteUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.patch('/:id/delete-with-password', authenticateOwner, deleteWithPassword);
+router.patch(
+  '/:id/delete-with-password',
+  authenticateOwner,
+  deleteWithPassword,
+);
 
 /**
  * @swagger
@@ -810,6 +830,76 @@ router.get('/:id/requests/sent', authenticateOwner, getSentRequests);
 
 /**
  * @swagger
+ * /api/user/info/block:
+ *   post:
+ *     summary: Bloquear a un usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               blockId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Usuario bloqueado
+ */
+router.post('/info/block', authenticateToken, blockUser);
+
+/**
+ * @swagger
+ * /api/user/info/unblock:
+ *   post:
+ *     summary: Desbloquear a un usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               unblockId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Usuario desbloqueado
+ */
+router.post('/info/unblock', authenticateToken, unblockUser);
+
+/**
+ * @swagger
+ * /api/user/{id}/blocked:
+ *   get:
+ *     summary: Obtener lista de usuarios bloqueados
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lista de bloqueados
+ */
+router.get('/:id/blocked', authenticateOwner, getBlockedUsers);
+
+/**
+ * @swagger
  * /api/user/{id}/heartbeat:
  *   post:
  *     summary: Registrar el heartbeat (última conexión) de un usuario
@@ -948,6 +1038,10 @@ router.get('/events/:eventId/chat', getEventChatForEvent);
  *       500:
  *         description: Error del servidor
  */
-router.post('/events/:eventId/chat', validateMessageContent, postEventChatMessage);
+router.post(
+  '/events/:eventId/chat',
+  validateMessageContent,
+  postEventChatMessage,
+);
 
 export default router;

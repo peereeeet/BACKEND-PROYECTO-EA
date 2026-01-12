@@ -122,11 +122,9 @@ export async function directResetPassword(req: Request, res: Response) {
     await userService.setPasswordByUserId(userId, newPassword);
     return res.json({ ok: true });
   } catch (err: any) {
-    return res
-      .status(400)
-      .json({
-        message: err?.message || 'No se pudo actualizar la contraseña.',
-      });
+    return res.status(400).json({
+      message: err?.message || 'No se pudo actualizar la contraseña.',
+    });
   }
 }
 
@@ -330,12 +328,18 @@ export async function uploadProfilePhoto(
     const { id } = req.params;
 
     if (!authId || authId !== id) {
-      logger.warn(`Intento no autorizado de subir foto: authId=${authId}, targetId=${id}`);
-      return res.status(403).json({ error: 'Solo puedes modificar tu propio perfil' });
+      logger.warn(
+        `Intento no autorizado de subir foto: authId=${authId}, targetId=${id}`,
+      );
+      return res
+        .status(403)
+        .json({ error: 'Solo puedes modificar tu propio perfil' });
     }
 
     if (!req.file) {
-      return res.status(400).json({ error: 'No se proporcionó ningún archivo' });
+      return res
+        .status(400)
+        .json({ error: 'No se proporcionó ningún archivo' });
     }
 
     const user = await Usuario.findById(id);
@@ -345,7 +349,12 @@ export async function uploadProfilePhoto(
     }
 
     if (user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
-      const oldFilePath = path.join(__dirname, '..', 'public', user.profilePhoto);
+      const oldFilePath = path.join(
+        __dirname,
+        '..',
+        'public',
+        user.profilePhoto,
+      );
       if (fs.existsSync(oldFilePath)) {
         fs.unlinkSync(oldFilePath);
       }
@@ -384,8 +393,12 @@ export async function deleteProfilePhoto(
     const { id } = req.params;
 
     if (!authId || authId !== id) {
-      logger.warn(`Intento no autorizado de eliminar foto: authId=${authId}, targetId=${id}`);
-      return res.status(403).json({ error: 'Solo puedes modificar tu propio perfil' });
+      logger.warn(
+        `Intento no autorizado de eliminar foto: authId=${authId}, targetId=${id}`,
+      );
+      return res
+        .status(403)
+        .json({ error: 'Solo puedes modificar tu propio perfil' });
     }
 
     const user = await Usuario.findById(id);
@@ -410,7 +423,9 @@ export async function deleteProfilePhoto(
     });
   } catch (error) {
     logger.error(`Error al eliminar foto de perfil: ${error}`);
-    return res.status(500).json({ error: 'Error al eliminar la foto de perfil' });
+    return res
+      .status(500)
+      .json({ error: 'Error al eliminar la foto de perfil' });
   }
 }
 
@@ -421,7 +436,11 @@ export async function deleteUserById(
   try {
     const { id } = req.params;
     const user = await Usuario.findById(id);
-    if (user && user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
+    if (
+      user &&
+      user.profilePhoto &&
+      user.profilePhoto.startsWith('/uploads/')
+    ) {
       const filePath = path.join(__dirname, '..', 'public', user.profilePhoto);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -647,12 +666,10 @@ export const checkEmailExists = async (req: Request, res: Response) => {
     }
 
     if (userId && existingUser._id.toString() === userId) {
-      return res
-        .status(200)
-        .json({
-          exists: false,
-          message: 'El correo pertenece al mismo usuario',
-        });
+      return res.status(200).json({
+        exists: false,
+        message: 'El correo pertenece al mismo usuario',
+      });
     }
 
     return res
@@ -885,12 +902,10 @@ export const removeFriendBoth = async (req: Request, res: Response) => {
       logger.warn(
         `IDs inválidos en removeFriendBoth: id=${id}, friendId=${friendId}`,
       );
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          message: 'Alguno de los IDs no es un ObjectId válido',
-        });
+      return res.status(400).json({
+        ok: false,
+        message: 'Alguno de los IDs no es un ObjectId válido',
+      });
     }
 
     const me = await userService.unlinkFriendsBothWays(id, friendId);
@@ -982,3 +997,44 @@ export const postEventChatMessage = async (req: Request, res: Response) => {
   }
 };
 
+export async function blockUser(req: Request, res: Response) {
+  try {
+    const { id, blockId } = req.body;
+    if (!id || !blockId) {
+      return res.status(400).json({ message: 'Faltan parámetros' });
+    }
+    const result = await userService.blockUser(id, blockId);
+    res.status(200).json(result);
+  } catch (error: any) {
+    logger.error('Error en blockUser:', error);
+    res.status(400).json({ error: error.message });
+  }
+}
+
+export async function unblockUser(req: Request, res: Response) {
+  try {
+    const { id, unblockId } = req.body;
+    if (!id || !unblockId) {
+      return res.status(400).json({ message: 'Faltan parámetros' });
+    }
+    const result = await userService.unblockUser(id, unblockId);
+    res.status(200).json(result);
+  } catch (error: any) {
+    logger.error('Error en unblockUser:', error);
+    res.status(400).json({ error: error.message });
+  }
+}
+
+export async function getBlockedUsers(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'ID es obligatorio' });
+    }
+    const users = await userService.getBlockedUsers(id);
+    res.status(200).json(users);
+  } catch (error: any) {
+    logger.error('Error en getBlockedUsers:', error);
+    res.status(400).json({ error: error.message });
+  }
+}
