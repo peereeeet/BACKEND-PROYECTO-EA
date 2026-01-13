@@ -20,6 +20,8 @@ import { ProfanityFilter } from './profanityFilter';
 // ----------- APP & SERVER ----------- //
 const app = express();
 const PORT = process.env.PORT || 3000;
+const usuarioServices = new UserService();
+const httpServer = createServer(app);
 
 // ----------- MIDDLEWARES ----------- //
 const allowedOrigins = [
@@ -33,7 +35,6 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
@@ -52,14 +53,16 @@ app.use(express.json());
 // ----------- SWAGGER ----------- //
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+// ----------- ROUTES ----------- //
+app.use('/api/user', usuarioRoutes);
+app.use('/api/event', eventoRoutes);
+app.use('/api/ratings', valoracionRoutes);
+app.use('/api/gamificacion', gamificacionRoutes);
+app.use('/api/ai', aiRoutes);
+
 // ----------- DATABASE ----------- //
-const mongoURL = process.env.MONGO_URL || 'mongodb://mongo:27017/BBDD';
-const usuarioServices = new UserService();
+const mongoURL = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/BBDD';
 
-// Crear servidor HTTP conjunto (API + WebSockets)
-const httpServer = createServer(app);
-
-// Conectar a MongoDB y arrancar el servidor
 mongoose
   .connect(mongoURL)
   .then(async () => {
@@ -76,13 +79,6 @@ mongoose
   .catch((err) => {
     logger.error({ error: err }, 'Error al conectar a MongoDB');
   });
-
-// ----------- ROUTES ----------- //
-app.use('/api/user', usuarioRoutes);
-app.use('/api/event', eventoRoutes);
-app.use('/api/ratings', valoracionRoutes);
-app.use('/api/gamificacion', gamificacionRoutes);
-app.use('/api/ai', aiRoutes);
 
 // ----------- SOCKET.IO ----------- //
 const io = new SocketIOServer(httpServer, {
@@ -112,14 +108,10 @@ io.on('connection', (socket) => {
   socket.on('user:online', async (userId: string) => {
     try {
       if (!userId) return;
-
       const data = socket.data as SocketData;
       data.userId = userId;
-
       socket.join(`user:${userId}`);
-
       await usuarioServices.setUserOnline(userId);
-
       io.emit('user:online', { userId });
       logger.info(`🟢 Usuario online: ${userId}`);
     } catch (err) {
@@ -132,7 +124,6 @@ io.on('connection', (socket) => {
       const data = socket.data as SocketData;
       const userId = data.userId;
       if (!userId) return;
-
       await usuarioServices.setUserOffline(userId);
       io.emit('user:offline', { userId });
       logger.info({ userId }, '🔴 Usuario offline');
@@ -153,8 +144,6 @@ io.on('connection', (socket) => {
   socket.on('chat:message', async ({ from, to, text }) => {
     try {
       if (!from || !to || !text?.trim()) return;
-
-      // Filtro de obscenidades
       const profanityResult = ProfanityFilter.check(text);
       if (!profanityResult.isClean) {
         socket.emit('chat:error', {
@@ -166,10 +155,8 @@ io.on('connection', (socket) => {
         });
         return;
       }
-
       const msg = await usuarioServices.addChatMessage(from, to, text.trim());
       const roomId = getChatRoomId(from, to);
-
       io.to(roomId).emit('chat:message', msg);
     } catch (err) {
       logger.error(`Error en chat:message: ${err}`);
@@ -186,8 +173,6 @@ io.on('connection', (socket) => {
     async ({ eventId, userId, username, text }) => {
       try {
         if (!eventId || !userId || !username || !text?.trim()) return;
-
-        // Filtro de obscenidades
         const profanityResult = ProfanityFilter.check(text);
         if (!profanityResult.isClean) {
           socket.emit('chat:error', {
@@ -199,14 +184,12 @@ io.on('connection', (socket) => {
           });
           return;
         }
-
         const msg = await usuarioServices.addEventChatMessage(
           eventId,
           userId,
           username,
           text.trim(),
         );
-
         io.to(getEventRoomId(eventId)).emit('eventChat:message', msg);
       } catch (err) {
         logger.error(`Error en eventChat:message: ${err}`);

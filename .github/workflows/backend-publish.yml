@@ -3,23 +3,14 @@ name: Backend Build & Push
 on:
   push:
     branches: ['main']
-    paths:
-      - 'BACKEND-PROYECTO-EA/**'
-      - '.github/workflows/backend-publish.yml'
   workflow_dispatch:
 
 env:
-  # Nombre de la imagen en Docker Hub. Ajusta "jin03" a tu usuario real.
-  IMAGE_NAME: jin03/backend
-  # Directorio donde está el backend (contexto de build)
-  CONTEXT_DIR: ./BACKEND-PROYECTO-EA
+  IMAGE_NAME: jin03/proyecto_ea-backend
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: Checkout repository
@@ -43,9 +34,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ${{ env.CONTEXT_DIR }}
-          if: github.repository != 'jin03/backend' # Evita error si path no existe en test
-          file: ${{ env.CONTEXT_DIR }}/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
