@@ -36,12 +36,14 @@ const io = new SocketIOServer(httpServer, {
 });
 
 ////////////////////// MIDDLEWARE CORS + JSON //////////////////////
-app.use(cors({
-  origin: 'http://localhost:4200',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(
+  cors({
+    origin: 'http://localhost:4200',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }),
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -71,15 +73,19 @@ async function checkEventReminders() {
     const upcomingEvents = await Evento.find({
       schedule: {
         $gte: in24Hours,
-        $lt: in25Hours
-      }
-    }).populate('participantes', '_id username').lean();
+        $lt: in25Hours,
+      },
+    })
+      .populate('participantes', '_id username')
+      .lean();
 
-    logger.info(`🔔 Revisando recordatorios: ${upcomingEvents.length} eventos encontrados`);
+    logger.info(
+      `🔔 Revisando recordatorios: ${upcomingEvents.length} eventos encontrados`,
+    );
 
     for (const evento of upcomingEvents) {
       const participantes = evento.participantes as any[];
-      
+
       for (const participante of participantes) {
         if (participante && participante._id) {
           try {
@@ -87,11 +93,15 @@ async function checkEventReminders() {
               participante._id.toString(),
               evento._id.toString(),
               evento.name,
-              new Date(evento.schedule)
+              new Date(evento.schedule),
             );
-            logger.info(`✅ Recordatorio enviado a ${participante.username} para evento "${evento.name}"`);
+            logger.info(
+              `✅ Recordatorio enviado a ${participante.username} para evento "${evento.name}"`,
+            );
           } catch (err) {
-            logger.error(`❌ Error enviando recordatorio a ${participante._id}: ${String(err)}`);
+            logger.error(
+              `❌ Error enviando recordatorio a ${participante._id}: ${String(err)}`,
+            );
           }
         }
       }
@@ -104,7 +114,9 @@ async function checkEventReminders() {
 async function cleanupOldNotificaciones() {
   try {
     const deleted = await notificacionService.deleteOldNotificaciones();
-    logger.info(`🗑️ Limpieza automática: ${deleted} notificaciones antiguas eliminadas`);
+    logger.info(
+      `🗑️ Limpieza automática: ${deleted} notificaciones antiguas eliminadas`,
+    );
   } catch (error) {
     logger.error(`❌ Error en limpieza de notificaciones: ${String(error)}`);
   }
@@ -120,17 +132,23 @@ mongoose
     await gamificacionService.inicializarInsignias();
 
     setInterval(checkEventReminders, 60 * 60 * 1000);
-    logger.info('⏰ Cron job de recordatorios de eventos iniciado (cada 1 hora)');
+    logger.info(
+      '⏰ Cron job de recordatorios de eventos iniciado (cada 1 hora)',
+    );
     checkEventReminders();
 
     setInterval(cleanupOldNotificaciones, 24 * 60 * 60 * 1000);
-    logger.info('🗑️ Cron job de limpieza de notificaciones iniciado (cada 24 horas)');
+    logger.info(
+      '🗑️ Cron job de limpieza de notificaciones iniciado (cada 24 horas)',
+    );
     cleanupOldNotificaciones();
 
     httpServer.listen(PORT, () => {
       logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
       logger.info(`Swagger docs en http://localhost:${PORT}/api-docs`);
-      logger.info(`📂 Archivos estáticos: ${path.join(__dirname, 'public', 'uploads')}`);
+      logger.info(
+        `📂 Archivos estáticos: ${path.join(__dirname, 'public', 'uploads')}`,
+      );
     });
   })
   .catch((err) => {
@@ -164,6 +182,17 @@ io.on('connection', (socket) => {
       logger.info(`🟢 Usuario online: ${userId}`);
     } catch (err) {
       logger.error(`Error en user:online: ${err}`);
+    }
+  });
+
+  socket.on('user:force_offline', async (userId: string) => {
+    try {
+      if (!userId) return;
+      await usuarioServices.setUserOffline(userId);
+      io.emit('user:offline', { userId });
+      logger.info(`🌙 Usuario en modo invisible (background): ${userId}`);
+    } catch (err) {
+      logger.error(`Error en user:force_offline: ${err}`);
     }
   });
 
@@ -212,7 +241,11 @@ io.on('connection', (socket) => {
         }
 
         try {
-          const savedMessage = await usuarioServices.addChatMessage(from, to, text.trim());
+          const savedMessage = await usuarioServices.addChatMessage(
+            from,
+            to,
+            text.trim(),
+          );
           const msg = {
             _id: String((savedMessage as any)._id),
             from: savedMessage.from,
@@ -223,37 +256,46 @@ io.on('connection', (socket) => {
 
           const roomId = getChatRoomId(from, to);
           io.to(roomId).emit('chat:message', msg);
-          
+
           logger.info(`💬 Mensaje guardado: ${from} → ${to}`);
 
           const chatRoom = io.sockets.adapter.rooms.get(roomId);
-          const recipientInChat = chatRoom && Array.from(chatRoom).some(socketId => {
-            const s = io.sockets.sockets.get(socketId);
-            const data = s?.data as SocketData;
-            return data?.userId === to;
-          });
+          const recipientInChat =
+            chatRoom &&
+            Array.from(chatRoom).some((socketId) => {
+              const s = io.sockets.sockets.get(socketId);
+              const data = s?.data as SocketData;
+              return data?.userId === to;
+            });
 
           if (!recipientInChat) {
             try {
-              const fromUser = await Usuario.findById(from).select('username').lean();
+              const fromUser = await Usuario.findById(from)
+                .select('username')
+                .lean();
               if (fromUser) {
                 const notificacion = await notificacionService.notifyNewMessage(
                   to,
                   from,
-                  fromUser.username
+                  fromUser.username,
                 );
 
                 if (notificacion) {
-                  logger.info(`✅ Notificación creada y enviada via Socket.IO a user:${to}`);
+                  logger.info(
+                    `✅ Notificación creada y enviada via Socket.IO a user:${to}`,
+                  );
                 } else {
-                  logger.error(`❌ No se pudo crear la notificación de mensaje`);
+                  logger.error(
+                    `❌ No se pudo crear la notificación de mensaje`,
+                  );
                 }
               }
             } catch (notifError) {
-              logger.error(`❌ Error al enviar notificación de mensaje: ${notifError}`);
+              logger.error(
+                `❌ Error al enviar notificación de mensaje: ${notifError}`,
+              );
             }
           }
-
         } catch (saveError) {
           logger.error(`Error al guardar mensaje: ${saveError}`);
           const msg = {
@@ -316,7 +358,7 @@ io.on('connection', (socket) => {
             eventId,
             userId,
             username,
-            text.trim()
+            text.trim(),
           );
 
           const msg = {
@@ -330,8 +372,10 @@ io.on('connection', (socket) => {
 
           const roomId = getEventRoomId(eventId);
           io.to(roomId).emit('eventChat:message', msg);
-          
-          logger.info(`🎉 Mensaje de evento guardado: ${username} en ${eventId}`);
+
+          logger.info(
+            `🎉 Mensaje de evento guardado: ${username} en ${eventId}`,
+          );
         } catch (saveError) {
           logger.error(`Error al guardar mensaje de evento: ${saveError}`);
           const msg = {
