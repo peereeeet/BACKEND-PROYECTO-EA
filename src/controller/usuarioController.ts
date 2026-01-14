@@ -20,7 +20,9 @@ export async function createUser(
 ): Promise<Response> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    logger.error(`Errores de validación al crear usuario:${errors.array()}`);
+    logger.error(
+      `Errores de validación al crear usuario: ${JSON.stringify(errors.array())}`,
+    );
     return res.status(400).json({ errors: errors.array() });
   }
   try {
@@ -539,7 +541,6 @@ export async function loginUser(
   }
 }
 
-
 export async function checkGoogleUser(req: Request, res: Response) {
   try {
     const { credential } = req.body;
@@ -567,20 +568,23 @@ export async function checkGoogleUser(req: Request, res: Response) {
         exists: true,
         needsData: !user.birthday, // Si falta cumpleaños, necesita datos
         hasUsername: !!user.username,
-        hasBirthday: !!user.birthday
+        hasBirthday: !!user.birthday,
       });
     } else {
       // Usuario nuevo
-      const suggestedName = payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
+      const suggestedName =
+        payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
       return res.status(200).json({
         exists: false,
         needsData: true,
-        suggestedUsername: suggestedName
+        suggestedUsername: suggestedName,
       });
     }
   } catch (error) {
     logger.error(`Error en checkGoogleUser: ${error}`);
-    return res.status(500).json({ message: 'Error al verificar usuario de Google' });
+    return res
+      .status(500)
+      .json({ message: 'Error al verificar usuario de Google' });
   }
 }
 
@@ -604,8 +608,9 @@ export async function loginWithGoogle(req: Request, res: Response) {
 
     const gmail = payload.email;
     const googleId = payload.sub || null;
-    
-    const suggestedName = payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
+
+    const suggestedName =
+      payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
 
     let birthdayDate: Date | undefined = undefined;
     if (birthday) {
@@ -619,12 +624,14 @@ export async function loginWithGoogle(req: Request, res: Response) {
 
     if (!user) {
       const finalUsername = username?.trim() || suggestedName;
-      
-      const existingUsername = await Usuario.findOne({ username: finalUsername });
+
+      const existingUsername = await Usuario.findOne({
+        username: finalUsername,
+      });
       if (existingUsername) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: 'USERNAME_EXISTS',
-          detail: 'Este nombre de usuario ya está en uso'
+          detail: 'Este nombre de usuario ya está en uso',
         });
       }
 
@@ -641,7 +648,8 @@ export async function loginWithGoogle(req: Request, res: Response) {
     } else {
       if (!user.isGoogleUser) {
         return res.status(400).json({
-          message: 'Esta cuenta ya existe sin Google. Inicia sesión con usuario y contraseña.',
+          message:
+            'Esta cuenta ya existe sin Google. Inicia sesión con usuario y contraseña.',
         });
       }
 
@@ -841,34 +849,41 @@ export async function sendFriendRequest(req: Request, res: Response) {
   try {
     const { id, targetId } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(targetId)) {
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(targetId)
+    ) {
       return res.status(400).json({ ok: false, message: 'IDs inválidos' });
     }
 
     if (id === targetId) {
-      return res.status(400).json({ 
-        ok: false, 
-        message: 'No puedes enviarte una solicitud a ti mismo' 
+      return res.status(400).json({
+        ok: false,
+        message: 'No puedes enviarte una solicitud a ti mismo',
       });
     }
 
     const result = await userService.sendFriendRequest(id, targetId);
-    
+
     if (!result.ok) {
       return res.status(400).json(result);
     }
 
     try {
-      const { io } = require('../index');
-      const fromUser = await Usuario.findById(id).select('username gmail').lean();
-      
+      const { io } = await import('../index');
+      const fromUser = await Usuario.findById(id)
+        .select('username gmail')
+        .lean();
+
       if (io && fromUser) {
         io.to(`user:${targetId}`).emit('friendRequest:received', {
           fromUserId: id,
           fromUsername: fromUser.username,
-          fromGmail: fromUser.gmail
+          fromGmail: fromUser.gmail,
         });
-        logger.info(`🔔 Evento friendRequest:received enviado a user:${targetId}`);
+        logger.info(
+          `🔔 Evento friendRequest:received enviado a user:${targetId}`,
+        );
       }
     } catch (socketError) {
       logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
@@ -877,9 +892,9 @@ export async function sendFriendRequest(req: Request, res: Response) {
     return res.status(200).json(result);
   } catch (error) {
     logger.error(`Error en sendFriendRequest: ${String(error)}`);
-    return res.status(500).json({ 
-      ok: false, 
-      message: 'Error al enviar solicitud de amistad' 
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al enviar solicitud de amistad',
     });
   }
 }
@@ -900,22 +915,27 @@ export async function acceptFriendRequest(req: Request, res: Response) {
   try {
     const { id, requesterId } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(requesterId)) {
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(requesterId)
+    ) {
       return res.status(400).json({ ok: false, message: 'IDs inválidos' });
     }
 
     const updatedUser = await userService.acceptFriendRequest(id, requesterId);
-    
+
     if (!updatedUser) {
-      return res.status(404).json({ ok: false, message: 'Usuario no encontrado' });
+      return res
+        .status(404)
+        .json({ ok: false, message: 'Usuario no encontrado' });
     }
 
     try {
-      const { io } = require('../index');
+      const { io } = await import('../index');
       if (io) {
         io.to(`user:${id}`).emit('friendRequest:updated', {
           type: 'accepted',
-          userId: requesterId
+          userId: requesterId,
         });
         logger.info(`🔔 Evento friendRequest:updated enviado a user:${id}`);
       }
@@ -923,16 +943,16 @@ export async function acceptFriendRequest(req: Request, res: Response) {
       logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
     }
 
-    return res.status(200).json({ 
-      ok: true, 
-      message: 'Solicitud aceptada', 
-      user: updatedUser 
+    return res.status(200).json({
+      ok: true,
+      message: 'Solicitud aceptada',
+      user: updatedUser,
     });
   } catch (error) {
     logger.error(`Error en acceptFriendRequest: ${String(error)}`);
-    return res.status(500).json({ 
-      ok: false, 
-      message: 'Error al aceptar solicitud de amistad' 
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al aceptar solicitud de amistad',
     });
   }
 }
@@ -941,22 +961,27 @@ export async function rejectFriendRequest(req: Request, res: Response) {
   try {
     const { id, requesterId } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(requesterId)) {
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(requesterId)
+    ) {
       return res.status(400).json({ ok: false, message: 'IDs inválidos' });
     }
 
     const updatedUser = await userService.rejectFriendRequest(id, requesterId);
-    
+
     if (!updatedUser) {
-      return res.status(404).json({ ok: false, message: 'Usuario no encontrado' });
+      return res
+        .status(404)
+        .json({ ok: false, message: 'Usuario no encontrado' });
     }
 
     try {
-      const { io } = require('../index');
+      const { io } = await import('../index');
       if (io) {
         io.to(`user:${id}`).emit('friendRequest:updated', {
           type: 'rejected',
-          userId: requesterId
+          userId: requesterId,
         });
         logger.info(`🔔 Evento friendRequest:updated enviado a user:${id}`);
       }
@@ -964,16 +989,16 @@ export async function rejectFriendRequest(req: Request, res: Response) {
       logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
     }
 
-    return res.status(200).json({ 
-      ok: true, 
-      message: 'Solicitud rechazada', 
-      user: updatedUser 
+    return res.status(200).json({
+      ok: true,
+      message: 'Solicitud rechazada',
+      user: updatedUser,
     });
   } catch (error) {
     logger.error(`Error en rejectFriendRequest: ${String(error)}`);
-    return res.status(500).json({ 
-      ok: false, 
-      message: 'Error al rechazar solicitud de amistad' 
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al rechazar solicitud de amistad',
     });
   }
 }
@@ -1167,7 +1192,42 @@ export async function getBlockedUsers(req: Request, res: Response) {
     const users = await userService.getBlockedUsers(id);
     res.status(200).json(users);
   } catch (error: any) {
-    logger.error('Error en getBlockedUsers:', error);
     res.status(400).json({ error: error.message });
+  }
+}
+
+export async function updateInterests(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = (req as any).user?.id;
+    const { interests } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!Array.isArray(interests)) {
+      return res
+        .status(400)
+        .json({ message: 'Interests debe ser un array de strings' });
+    }
+
+    const user = await Usuario.findByIdAndUpdate(
+      userId,
+      { interests },
+      { new: true },
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    logger.info(`Intereses actualizados para el usuario ${userId}`);
+    return res.status(200).json({ ok: true, user });
+  } catch (error) {
+    logger.error(`Error al actualizar intereses: ${error}`);
+    return res.status(500).json({ message: 'Error al actualizar intereses' });
   }
 }

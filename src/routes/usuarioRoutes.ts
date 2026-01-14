@@ -37,6 +37,7 @@ import {
   unblockUser,
   checkGoogleUser,
   getBlockedUsers,
+  updateInterests,
 } from '../controller/usuarioController';
 import {
   validateUserContent,
@@ -922,6 +923,35 @@ router.get('/:id/blocked', authenticateOwner, getBlockedUsers);
  *         description: Error del servidor
  */
 router.post('/:id/heartbeat', authenticateOwner, postHeartbeat);
+
+/**
+ * @swagger
+ * /api/user/interests:
+ *   post:
+ *     summary: Actualizar los intereses del usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               interests:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Intereses actualizados
+ *       401:
+ *         description: No autenticado
+ *       500:
+ *         description: Error del servidor
+ */
+router.post('/interests/update', authenticateToken, updateInterests);
 
 /**
  * @swagger

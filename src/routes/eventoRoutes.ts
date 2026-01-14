@@ -22,6 +22,7 @@ import {
   removeInvitedUserFromEvent,
   getEventosVisibles,
   getCalendarEvents,
+  getRecommendedEventos,
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 import { validateEventContent } from '../profanityMiddleware';
@@ -89,6 +90,22 @@ router.get('/by-bounds', getEventosByBounds);
  *         description: Error del servidor
  */
 router.get('/upcoming', getUpcomingEventos);
+
+/**
+ * @swagger
+ * /api/event/recommended:
+ *   get:
+ *     summary: Obtener eventos recomendados para el usuario autenticado
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de eventos recomendados
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/recommended', authenticateToken, getRecommendedEventos);
 
 /**
  * @swagger

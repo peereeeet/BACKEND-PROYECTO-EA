@@ -23,6 +23,7 @@ export interface IUsuario {
   isGoogleUser?: boolean;
   googleId?: string | null;
   blockedUsers: Types.ObjectId[];
+  interests: string[];
 }
 
 const usuarioSchema = new Schema<IUsuario>(
@@ -61,6 +62,7 @@ const usuarioSchema = new Schema<IUsuario>(
       { type: Schema.Types.ObjectId, ref: 'Usuario', default: [] },
     ],
     rol: { type: String, enum: ['admin', 'usuario'], default: 'usuario' },
+    interests: [{ type: String, default: [] }],
   },
   {
     timestamps: false,

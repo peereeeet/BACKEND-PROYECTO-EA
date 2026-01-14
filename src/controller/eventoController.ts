@@ -801,12 +801,10 @@ export async function inviteUsersToPrivateEvent(
     });
   } catch (error) {
     logger.error(`Error invitando usuarios: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error invitando usuarios',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error invitando usuarios',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -849,12 +847,10 @@ export async function acceptPrivateEventInvitation(
     });
   } catch (error) {
     logger.error(`Error aceptando invitación: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error aceptando invitación',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error aceptando invitación',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -895,12 +891,10 @@ export async function rejectPrivateEventInvitation(
     });
   } catch (error) {
     logger.error(`Error rechazando invitación: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error rechazando invitación',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error rechazando invitación',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -923,12 +917,10 @@ export async function getMyPendingInvitations(
     });
   } catch (error) {
     logger.error(`Error obteniendo invitaciones: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error obteniendo invitaciones',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error obteniendo invitaciones',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -973,12 +965,10 @@ export async function removeInvitedUserFromEvent(
     });
   } catch (error) {
     logger.error(`Error eliminando invitado: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error eliminando invitado',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error eliminando invitado',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -1012,12 +1002,10 @@ export async function getEventosVisibles(
     return res.status(200).json(result);
   } catch (error) {
     logger.error(`Error obteniendo eventos visibles: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error obteniendo eventos visibles',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error obteniendo eventos visibles',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -1051,11 +1039,56 @@ export async function getCalendarEvents(
     return res.status(200).json(eventos);
   } catch (error) {
     logger.error(`Error obteniendo eventos de calendario: ${error}`);
+    return res.status(500).json({
+      message: 'Error obteniendo eventos de calendario',
+      error: (error as Error).message,
+    });
+  }
+}
+
+export async function getRecommendedEventos(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const user = await Usuario.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    if (!user.interests || user.interests.length === 0) {
+      return res
+        .status(200)
+        .json({ data: [], message: 'No tienes intereses definidos' });
+    }
+
+    const now = new Date();
+    const filter: any = {
+      schedule: { $gte: now },
+      categoria: { $in: user.interests },
+      isPrivate: false, // Solo públicos para recomendaciones generales por ahora
+    };
+
+    // Excluir eventos donde ya participa
+    filter.participantes = { $ne: userId };
+
+    const eventos = await Evento.find(filter)
+      .sort({ schedule: 1 })
+      .limit(10)
+      .populate('participantes', 'username gmail')
+      .populate('creador', 'username gmail');
+
+    logger.info(`Recomendaciones obtenidas para el usuario ${userId}`);
+    return res.status(200).json({ data: eventos });
+  } catch (error) {
+    logger.error(`Error obteniendo recomendaciones: ${error}`);
     return res
       .status(500)
-      .json({
-        message: 'Error obteniendo eventos de calendario',
-        error: (error as Error).message,
-      });
+      .json({ message: 'Error obteniendo recomendaciones' });
   }
 }
