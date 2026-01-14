@@ -1046,6 +1046,73 @@ export async function getCalendarEvents(
   }
 }
 
+const INTEREST_TO_CATEGORIES: Record<string, string[]> = {
+  Deportes: [
+    'Fútbol',
+    'Baloncesto',
+    'Tenis',
+    'Pádel',
+    'Running',
+    'Ciclismo',
+    'Natación',
+    'Yoga',
+    'Gimnasio',
+    'Senderismo',
+  ],
+  Música: [
+    'Concierto Rock',
+    'Concierto Pop',
+    'Concierto Clásica',
+    'Jazz',
+    'Electrónica',
+    'Hip Hop',
+    'Karaoke',
+    'Festival Musical',
+    'Discoteca',
+  ],
+  Tecnología: [
+    'Gaming',
+    'eSports',
+    'Programación',
+    'Inteligencia Artificial',
+    'Blockchain',
+    'Startups',
+    'Hackathon',
+    'Meetup Tech',
+  ],
+  Gastronomía: [
+    'Restaurante',
+    'Tapas',
+    'Cocina Internacional',
+    'Vinos',
+    'Cerveza Artesanal',
+    'Repostería',
+    'Brunch',
+    'Food Truck',
+  ],
+  Cultura: [
+    'Exposición Arte',
+    'Teatro',
+    'Cine',
+    'Museo',
+    'Literatura',
+    'Fotografía',
+    'Pintura',
+    'Danza',
+  ],
+  Social: [
+    'Discoteca',
+    'After Work',
+    'Networking',
+    'Speed Dating',
+    'Fiesta Temática',
+    'Cumpleaños',
+    'Fiesta Privada',
+  ],
+  Salud: ['Meditación', 'Spa', 'Wellness', 'Mindfulness', 'Salud Mental'],
+  'Aire Libre': ['Camping', 'Montañismo', 'Playa', 'Barbacoa', 'Picnic'],
+};
+
 export async function getRecommendedEventos(
   req: Request,
   res: Response,
@@ -1055,6 +1122,10 @@ export async function getRecommendedEventos(
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
     }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
 
     const user = await Usuario.findById(userId);
     if (!user) {
@@ -1067,24 +1138,45 @@ export async function getRecommendedEventos(
         .json({ data: [], message: 'No tienes intereses definidos' });
     }
 
+    // Expandimos los intereses para incluir subcategorías de categorías generales
+    const expandedCategories = new Set<string>();
+    user.interests.forEach((interest) => {
+      expandedCategories.add(interest);
+      const subCategories = INTEREST_TO_CATEGORIES[interest];
+      if (subCategories) {
+        subCategories.forEach((cat) => expandedCategories.add(cat));
+      }
+    });
+
     const now = new Date();
     const filter: any = {
       schedule: { $gte: now },
-      categoria: { $in: user.interests },
-      isPrivate: false, // Solo públicos para recomendaciones generales por ahora
+      categoria: { $in: Array.from(expandedCategories) },
+      isPrivate: false,
     };
 
-    // Excluir eventos donde ya participa
     filter.participantes = { $ne: userId };
 
+    const total = await Evento.countDocuments(filter);
     const eventos = await Evento.find(filter)
       .sort({ schedule: 1 })
-      .limit(10)
+      .skip(skip)
+      .limit(limit)
       .populate('participantes', 'username gmail')
       .populate('creador', 'username gmail');
 
-    logger.info(`Recomendaciones obtenidas para el usuario ${userId}`);
-    return res.status(200).json({ data: eventos });
+    logger.info(
+      `Recomendaciones: Pag ${page}, Total: ${total} para usuario ${userId}`,
+    );
+    return res.status(200).json({
+      data: eventos,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     logger.error(`Error obteniendo recomendaciones: ${error}`);
     return res
