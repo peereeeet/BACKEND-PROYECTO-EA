@@ -654,10 +654,8 @@ export class UserService {
     }
     if (userId === blockId) throw new Error('No puedes bloquearte a ti mismo');
 
-    // Desvincular amistades y solicitudes en ambos sentidos
     await this.unlinkFriendsBothWays(userId, blockId);
 
-    // Añadir a la lista de bloqueados DEL usuario que bloquea
     await Usuario.findByIdAndUpdate(userId, {
       $addToSet: { blockedUsers: new Types.ObjectId(blockId) },
     });

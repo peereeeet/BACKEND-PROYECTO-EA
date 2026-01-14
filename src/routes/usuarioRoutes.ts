@@ -35,6 +35,7 @@ import {
   loginWithGoogle,
   blockUser,
   unblockUser,
+  checkGoogleUser,
   getBlockedUsers,
 } from '../controller/usuarioController';
 import {
@@ -478,6 +479,8 @@ router.put('/:id/addEvent', authenticateadminToken, addEventToUser);
 router.post('/auth/login', loginUser);
 
 router.post('/auth/google', loginWithGoogle);
+
+router.post('/auth/google/check', checkGoogleUser);
 
 /**
  * @swagger
