@@ -26,13 +26,14 @@ export async function createUser(
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { username, gmail, password, birthday, rol } = req.body as IUsuario;
+    const { username, gmail, password, birthday, rol, interests } = req.body as IUsuario;
     const newUser: Partial<IUsuario> = {
       username,
       gmail,
       password,
       birthday,
       rol: rol || 'usuario',
+      interests: interests || [],
     };
     const user = await userService.createUser(newUser);
     logger.info(`Usuario creado: ${user!.username}`);
@@ -265,8 +266,8 @@ export async function updateOwnProfile(
       return res.status(400).json({ error: 'ID invalido' });
     }
 
-    const { username, gmail, password, birthday } =
-      req.body as Partial<IUsuario>;
+    const { username, gmail, password, birthday, interests } =
+      req.body as Partial<IUsuario & { interests?: string[] }>;
 
     const user = await Usuario.findById(id);
     if (!user) {
@@ -278,6 +279,7 @@ export async function updateOwnProfile(
     if (typeof gmail === 'string') user.gmail = gmail;
     if (birthday !== undefined)
       user.birthday = new Date(String(birthday)) as any;
+    if (Array.isArray(interests)) user.interests = interests;
     if (typeof password === 'string' && password.trim() !== '') {
       user.password = password;
     }
@@ -590,7 +592,7 @@ export async function checkGoogleUser(req: Request, res: Response) {
 
 export async function loginWithGoogle(req: Request, res: Response) {
   try {
-    const { credential, birthday, username } = req.body;
+    const { credential, birthday, username, interests } = req.body;
 
     if (!credential) {
       return res.status(400).json({ message: 'Falta el token de Google' });
@@ -620,6 +622,8 @@ export async function loginWithGoogle(req: Request, res: Response) {
       }
     }
 
+    const userInterests: string[] = Array.isArray(interests) ? interests : [];
+
     let user = await Usuario.findOne({ gmail });
 
     if (!user) {
@@ -642,9 +646,11 @@ export async function loginWithGoogle(req: Request, res: Response) {
         rol: 'usuario',
         isGoogleUser: true,
         googleId,
+        interests: userInterests,
       } as Partial<IUsuario>);
 
       await user.save();
+      logger.info(`✅ Nuevo usuario creado con Google: ${finalUsername}, intereses: ${userInterests.length}`);
     } else {
       if (!user.isGoogleUser) {
         return res.status(400).json({
@@ -661,6 +667,11 @@ export async function loginWithGoogle(req: Request, res: Response) {
       if (!user.birthday && birthdayDate) {
         user.birthday = birthdayDate;
         mustSave = true;
+      }
+      if (userInterests.length > 0) {
+        user.interests = userInterests;
+        mustSave = true;
+        logger.info(`📝 Actualizando intereses para usuario existente: ${user.username}`);
       }
       if (mustSave) {
         await user.save();
