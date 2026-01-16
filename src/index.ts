@@ -15,6 +15,7 @@ import gamificacionService from './services/gamificacionServices';
 import aiRoutes from './routes/aiRoutes';
 import notificacionRoutes from './routes/notificacionRoutes';
 import notificacionService from './services/notificacionServices';
+import { cleanupOldEventPhotos } from './controller/eventoController';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { logger } from './config/logger';
@@ -142,6 +143,12 @@ mongoose
       '🗑️ Cron job de limpieza de notificaciones iniciado (cada 24 horas)',
     );
     cleanupOldNotificaciones();
+
+    setInterval(cleanupOldEventPhotos, 24 * 60 * 60 * 1000);
+    logger.info(
+      '🗑️ Cron job de limpieza de fotos de eventos iniciado (cada 24 horas)',
+    );
+    cleanupOldEventPhotos();
 
     httpServer.listen(PORT, () => {
       logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);

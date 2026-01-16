@@ -23,9 +23,12 @@ import {
   getEventosVisibles,
   getCalendarEvents,
   getRecommendedEventos,
+  uploadEventoPhoto,
+  getEventoPhotos,
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 import { validateEventContent } from '../profanityMiddleware';
+import { uploadEventPhoto } from '../config/uploadConfig';
 
 const router = Router();
 
@@ -735,5 +738,65 @@ router.get('/calendar', authenticateToken, getCalendarEvents);
  */
 
 router.get('/:id', authenticateToken, getEventoById);
+
+/**
+ * @swagger
+ * /api/event/{id}/photos:
+ *   post:
+ *     summary: Subir una foto a un evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photo:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Foto subida correctamente
+ *       403:
+ *         description: No tienes permiso para subir fotos
+ *       404:
+ *         description: Evento no encontrado
+ */
+router.post(
+  '/:id/photos',
+  authenticateToken,
+  uploadEventPhoto.single('photo'),
+  uploadEventoPhoto,
+);
+
+/**
+ * @swagger
+ * /api/event/{id}/photos:
+ *   get:
+ *     summary: Obtener fotos de un evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lista de fotos del evento
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/:id/photos', authenticateToken, getEventoPhotos);
 
 export default router;
