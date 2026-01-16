@@ -48,7 +48,10 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+app.use(
+  '/uploads/profile-photos',
+  express.static(path.join(__dirname, 'public', 'uploads', 'profile-photos')),
+);
 
 app.use('/uploads', (req, res, next) => {
   logger.info(`📂 Archivo solicitado: ${req.url}`);

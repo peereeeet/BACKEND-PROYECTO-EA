@@ -1244,7 +1244,7 @@ export async function uploadEventoPhoto(
         .json({ message: 'No tienes permiso para subir fotos a este evento' });
     }
 
-    const photoUrl = `/uploads/event-photos/${req.file.filename}`;
+    const photoUrl = `/api/event/${eventId}/photo/${req.file.filename}`;
     const newPhoto = new EventoPhoto({
       eventId: new Types.ObjectId(eventId),
       userId: new Types.ObjectId(userId),
@@ -1286,19 +1286,69 @@ export async function getEventoPhotos(
     const isCreator = evento.creador.toString() === userId;
 
     if (!isParticipant && !isCreator && evento.isPrivate) {
-      return res
-        .status(403)
-        .json({
-          message:
-            'No tienes permiso para ver las fotos de este evento privado',
-        });
+      return res.status(403).json({
+        message: 'No tienes permiso para ver las fotos de este evento privado',
+      });
     }
 
     const photos = await EventoPhoto.find({ eventId }).sort({ createdAt: -1 });
-    return res.status(200).json(photos);
+    const mappedPhotos = photos.map((p) => {
+      const obj = p.toObject();
+      if (obj.url.startsWith('/uploads/event-photos/')) {
+        const filename = path.basename(obj.url);
+        obj.url = `/api/event/${eventId}/photo/${filename}`;
+      }
+      return obj;
+    });
+    return res.status(200).json(mappedPhotos);
   } catch (error) {
     logger.error(`Error obteniendo fotos del evento: ${error}`);
     return res.status(500).json({ message: 'Error obteniendo fotos' });
+  }
+}
+
+export async function getSecureEventoPhoto(
+  req: Request,
+  res: Response,
+): Promise<void | Response> {
+  try {
+    const { id: eventId, filename } = req.params;
+    const userId = (req as any).user?.id;
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    // Verificar si el usuario es participante o creador
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId,
+    );
+    const isCreator = evento.creador.toString() === userId;
+
+    if (!isParticipant && !isCreator) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permiso para ver esta foto' });
+    }
+
+    const filePath = path.join(
+      __dirname,
+      '..',
+      'public',
+      'uploads',
+      'event-photos',
+      filename,
+    );
+
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    } else {
+      return res.status(404).json({ message: 'Archivo no encontrado' });
+    }
+  } catch (error) {
+    logger.error(`Error sirviendo foto segura: ${error}`);
+    return res.status(500).json({ message: 'Error al obtener la foto' });
   }
 }
 

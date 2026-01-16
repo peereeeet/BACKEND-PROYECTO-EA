@@ -25,6 +25,7 @@ import {
   getRecommendedEventos,
   uploadEventoPhoto,
   getEventoPhotos,
+  getSecureEventoPhoto,
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 import { validateEventContent } from '../profanityMiddleware';
@@ -798,5 +799,7 @@ router.post(
  *         description: No autenticado
  */
 router.get('/:id/photos', authenticateToken, getEventoPhotos);
+
+router.get('/:id/photo/:filename', authenticateToken, getSecureEventoPhoto);
 
 export default router;
