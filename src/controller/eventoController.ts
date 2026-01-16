@@ -1119,6 +1119,7 @@ export async function getRecommendedEventos(
 ): Promise<Response> {
   try {
     const userId = (req as any).user?.id;
+    logger.info(`[getRecommendedEventos] INICIO - userId: ${userId}`);
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
     }
@@ -1138,7 +1139,10 @@ export async function getRecommendedEventos(
         .json({ data: [], message: 'No tienes intereses definidos' });
     }
 
-    // Expandimos los intereses para incluir subcategorías de categorías generales
+    logger.info(
+      `[getRecommendedEventos] User ${userId} interests: ${user.interests}`,
+    );
+
     const expandedCategories = new Set<string>();
     user.interests.forEach((interest) => {
       expandedCategories.add(interest);
@@ -1148,6 +1152,10 @@ export async function getRecommendedEventos(
       }
     });
 
+    logger.info(
+      `[getRecommendedEventos] Expanded categories: ${Array.from(expandedCategories)}`,
+    );
+
     const now = new Date();
     const filter: any = {
       schedule: { $gte: now },
@@ -1155,9 +1163,15 @@ export async function getRecommendedEventos(
       isPrivate: false,
     };
 
-    filter.participantes = { $ne: userId };
+    const userObjectId = new Types.ObjectId(userId);
+    filter.participantes = { $ne: userObjectId };
+
+    logger.info(
+      `[getRecommendedEventos] Filter built: ${JSON.stringify(filter)}`,
+    );
 
     const total = await Evento.countDocuments(filter);
+    logger.info(`[getRecommendedEventos] Total found: ${total}`);
     const eventos = await Evento.find(filter)
       .sort({ schedule: 1 })
       .skip(skip)
@@ -1166,8 +1180,9 @@ export async function getRecommendedEventos(
       .populate('creador', 'username gmail');
 
     logger.info(
-      `Recomendaciones: Pag ${page}, Total: ${total} para usuario ${userId}`,
+      `[getRecommendedEventos] Found ${eventos.length} events out of ${total} total`,
     );
+
     return res.status(200).json({
       data: eventos,
       pagination: {

@@ -708,7 +708,7 @@ router.get('/visible', authenticateToken, getEventosVisibles);
  *       401:
  *         description: No autenticado
  */
-
+router.get('/calendar', authenticateToken, getCalendarEvents);
 /**
  * @swagger
  * /api/event/{id}:
