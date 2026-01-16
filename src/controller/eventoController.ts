@@ -1239,27 +1239,36 @@ export async function uploadEventoPhoto(
 
     if (!isParticipant && !isCreator) {
       if (req.file) fs.unlinkSync(req.file.path);
-      return res
-        .status(403)
-        .json({ message: 'No tienes permiso para subir fotos a este evento' });
+      return res.status(403).json({
+        message:
+          'No tienes permiso para subir contenido multimedia a este evento',
+      });
     }
 
+    const isVideo = req.file.mimetype.startsWith('video/');
+    const type = isVideo ? 'video' : 'image';
+
     const photoUrl = `/api/event/${eventId}/photo/${req.file.filename}`;
-    const newPhoto = new EventoPhoto({
+    const newMedia = new EventoPhoto({
       eventId: new Types.ObjectId(eventId),
       userId: new Types.ObjectId(userId),
       username,
       url: photoUrl,
+      type,
     });
 
-    await newPhoto.save();
+    await newMedia.save();
 
-    logger.info(`Foto subida al evento ${eventId} por ${username}`);
-    return res.status(201).json(newPhoto);
+    logger.info(
+      `📷 ${
+        isVideo ? 'Video' : 'Foto'
+      } subida al evento ${eventId} por ${username}`,
+    );
+    return res.status(201).json(newMedia);
   } catch (error) {
-    logger.error(`Error subiendo foto al evento: ${error}`);
+    logger.error(`Error subiendo contenido al evento: ${error}`);
     if (req.file) fs.unlinkSync(req.file.path);
-    return res.status(500).json({ message: 'Error subiendo foto' });
+    return res.status(500).json({ message: 'Error subiendo contenido' });
   }
 }
 
@@ -1361,7 +1370,9 @@ export async function cleanupOldEventPhotos() {
       createdAt: { $lt: oneWeekAgo },
     });
 
-    logger.info(`Iniciando limpieza de ${oldPhotos.length} fotos antiguas`);
+    logger.info(
+      `Iniciando limpieza de ${oldPhotos.length} archivos multimedia antiguos`,
+    );
 
     for (const photo of oldPhotos) {
       const fileName = path.basename(photo.url);
@@ -1382,7 +1393,7 @@ export async function cleanupOldEventPhotos() {
 
     if (oldPhotos.length > 0) {
       logger.info(
-        `✅ Se han eliminado ${oldPhotos.length} fotos con más de 1 semana`,
+        `✅ Se han eliminado ${oldPhotos.length} archivos multimedia con más de 1 semana`,
       );
     }
   } catch (error) {

@@ -56,6 +56,11 @@ const fileFilter = (
     'image/png',
     'image/gif',
     'image/webp',
+    'video/mp4',
+    'video/mpeg',
+    'video/quicktime',
+    'video/x-msvideo',
+    'video/webm',
   ];
 
   if (allowedMimes.includes(file.mimetype)) {
@@ -63,7 +68,7 @@ const fileFilter = (
   } else {
     cb(
       new Error(
-        'Tipo de archivo no permitido. Solo se aceptan imágenes (JPEG, PNG, GIF, WEBP).',
+        'Tipo de archivo no permitido. Solo se aceptan imágenes (JPEG, PNG, GIF, WEBP) y videos (MP4, MPEG, MOV, AVI, WEBM).',
       ),
     );
   }
@@ -81,6 +86,6 @@ export const uploadEventPhoto = multer({
   storage: eventStorage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB para fotos de eventos
+    fileSize: 50 * 1024 * 1024, // 50MB para media de eventos (fotos y videos)
   },
 });

@@ -158,6 +158,7 @@ export interface IEventoPhoto {
   userId: Types.ObjectId;
   username: string;
   url: string;
+  type: 'image' | 'video';
   createdAt: Date;
 }
 
@@ -172,6 +173,7 @@ const eventoPhotoSchema = new Schema<IEventoPhoto>(
     userId: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true },
     username: { type: String, required: true },
     url: { type: String, required: true },
+    type: { type: String, enum: ['image', 'video'], default: 'image' },
     createdAt: { type: Date, default: Date.now, index: true },
   },
   { versionKey: false },
