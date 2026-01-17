@@ -22,9 +22,20 @@ import {
   removeInvitedUserFromEvent,
   getEventosVisibles,
   getCalendarEvents,
+  getRecommendedEventos,
+  uploadEventoPhoto,
+  getEventoPhotos,
+  getSecureEventoPhoto,
+  deleteEventoPhoto,
+  uploadEventChatImage,
 } from '../controller/eventoController';
-import { authenticateToken } from '../auth/middleware';
+import {
+  authenticateToken,
+  optionalAuthenticateToken,
+} from '../auth/middleware';
 import { validateEventContent } from '../profanityMiddleware';
+import { uploadEventChatImage as uploadEventChatImageMulter } from '../config/uploadEventChatConfig';
+import { uploadEventPhoto } from '../config/uploadConfig';
 
 const router = Router();
 
@@ -92,6 +103,22 @@ router.get('/upcoming', getUpcomingEventos);
 
 /**
  * @swagger
+ * /api/event/recommended:
+ *   get:
+ *     summary: Obtener eventos recomendados para el usuario autenticado
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de eventos recomendados
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/recommended', authenticateToken, getRecommendedEventos);
+
+/**
+ * @swagger
  * /api/event/search:
  *   get:
  *     summary: Buscar eventos por nombre y/o fecha
@@ -145,7 +172,7 @@ router.get('/upcoming', getUpcomingEventos);
  *       500:
  *         description: Error del servidor
  */
-router.get('/search', searchEventos);
+router.get('/search', authenticateToken, searchEventos);
 
 /**
  * @swagger
@@ -691,7 +718,7 @@ router.get('/visible', authenticateToken, getEventosVisibles);
  *       401:
  *         description: No autenticado
  */
-
+router.get('/calendar', authenticateToken, getCalendarEvents);
 /**
  * @swagger
  * /api/event/{id}:
@@ -719,4 +746,142 @@ router.get('/visible', authenticateToken, getEventosVisibles);
 
 router.get('/:id', authenticateToken, getEventoById);
 
-export default router;
+/**
+ * @swagger
+ * /api/event/{id}/photos:
+ *   post:
+ *     summary: Subir una foto a un evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photo:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Foto subida correctamente
+ *       403:
+ *         description: No tienes permiso para subir fotos
+ *       404:
+ *         description: Evento no encontrado
+ */
+router.post(
+  '/:id/photos',
+  authenticateToken,
+  uploadEventPhoto.single('photo'),
+  uploadEventoPhoto,
+);
+
+/**
+ * @swagger
+ * /api/event/{id}/photos:
+ *   get:
+ *     summary: Obtener fotos de un evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lista de fotos del evento
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/:id/photos', authenticateToken, getEventoPhotos);
+
+router.get(
+  '/:id/photo/:filename',
+  optionalAuthenticateToken,
+  getSecureEventoPhoto,
+);
+
+/**
+ * @swagger
+ * /api/event/{id}/photos/{photoId}:
+ *   delete:
+ *     summary: Eliminar una foto del evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del evento
+ *       - in: path
+ *         name: photoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID de la foto
+ *     responses:
+ *       200:
+ *         description: Foto eliminada correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: Sin permisos para eliminar
+ *       404:
+ *         description: Foto o evento no encontrado
+ */
+router.delete('/:id/photos/:photoId', authenticateToken, deleteEventoPhoto);
+
+export default router; /**
+ * @swagger
+ * /api/event/{id}/chat-image:
+ *   post:
+ *     summary: Subir una imagen al chat del evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del evento
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Imagen subida correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: Solo los participantes pueden enviar imágenes
+ *       404:
+ *         description: Evento no encontrado
+ */
+router.post(
+  '/:id/chat-image',
+  authenticateToken,
+  uploadEventChatImageMulter.single('image'),
+  uploadEventChatImage,
+);

@@ -4,6 +4,8 @@ import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import {
   ChatMessageModel,
   IChatMessage,
@@ -590,18 +592,22 @@ export class UserService {
     from: string,
     to: string,
     text: string,
+    imageUrl?: string,
   ): Promise<IChatMessage> {
     try {
       const message = new ChatMessageModel({
         from,
         to,
         text,
+        imageUrl,
         createdAt: new Date(),
       });
 
       await message.save();
 
-      logger.info(`Mensaje guardado: ${from} → ${to}`);
+      logger.info(
+        `Mensaje guardado: ${from} → ${to}${imageUrl ? ' (con imagen)' : ''}`,
+      );
       return message;
     } catch (error) {
       logger.error(`Error al guardar mensaje: ${error}`);
@@ -628,6 +634,7 @@ export class UserService {
     userId: string,
     username: string,
     text: string,
+    imageUrl?: string,
   ): Promise<IEventChatMessage> {
     try {
       const message = new EventChatMessageModel({
@@ -635,14 +642,18 @@ export class UserService {
         userId,
         username,
         text,
+        imageUrl,
         createdAt: new Date(),
       });
 
       await message.save();
 
-      logger.info(`Mensaje de evento guardado: ${username} en ${eventId}`);
+      logger.info(
+        `Mensaje de evento guardado: ${username} en ${eventId}${imageUrl ? ' (con imagen)' : ''}`,
+      );
       return message;
     } catch (error) {
+      logger.error(`Error al guardar mensaje de evento: ${error}`);
       logger.error(`Error al guardar mensaje de evento: ${error}`);
       throw error;
     }
@@ -654,10 +665,8 @@ export class UserService {
     }
     if (userId === blockId) throw new Error('No puedes bloquearte a ti mismo');
 
-    // Desvincular amistades y solicitudes en ambos sentidos
     await this.unlinkFriendsBothWays(userId, blockId);
 
-    // Añadir a la lista de bloqueados DEL usuario que bloquea
     await Usuario.findByIdAndUpdate(userId, {
       $addToSet: { blockedUsers: new Types.ObjectId(blockId) },
     });
@@ -697,6 +706,194 @@ export class UserService {
     }));
 
     return data;
+  }
+
+  async deleteEventChatMessage(messageId: string, userId: string) {
+    try {
+      if (!Types.ObjectId.isValid(messageId)) {
+        return {
+          success: false,
+          status: 400,
+          message: 'ID de mensaje inválido',
+        };
+      }
+
+      const message = await EventChatMessageModel.findById(messageId);
+
+      if (!message) {
+        return {
+          success: false,
+          status: 404,
+          message: 'Mensaje no encontrado',
+        };
+      }
+
+      if (message.userId !== userId) {
+        return {
+          success: false,
+          status: 403,
+          message: 'No tienes permiso para eliminar este mensaje',
+        };
+      }
+
+      let deletedImage = false;
+      if (message.imageUrl) {
+        try {
+          const filename = message.imageUrl.split('/').pop();
+          if (filename) {
+            const filePath = path.join(
+              __dirname,
+              '..',
+              'public',
+              'uploads',
+              'event-chat',
+              filename,
+            );
+
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              deletedImage = true;
+              logger.info(`Imagen eliminada: ${filePath}`);
+            }
+          }
+        } catch (error) {
+          logger.error(`Error al eliminar imagen: ${error}`);
+        }
+      }
+
+      await EventChatMessageModel.findByIdAndDelete(messageId);
+
+      const eventRoomId = `event:${message.eventId}`;
+      io.to(eventRoomId).emit('eventChat:messageDeleted', {
+        messageId: messageId,
+        eventId: message.eventId,
+      });
+
+      logger.info(
+        `Mensaje eliminado: ${messageId} del evento ${message.eventId} por usuario ${userId}`,
+      );
+
+      return {
+        success: true,
+        message: 'Mensaje eliminado correctamente',
+        deletedImage,
+      };
+    } catch (error) {
+      logger.error(`Error en deleteEventChatMessage: ${error}`);
+      return {
+        success: false,
+        status: 500,
+        message: 'Error al eliminar el mensaje',
+      };
+    }
+  }
+
+  async addChatMessageWithImage(
+    from: string,
+    to: string,
+    text: string,
+    imageUrl?: string,
+  ): Promise<IChatMessage> {
+    try {
+      const message = new ChatMessageModel({
+        from,
+        to,
+        text,
+        imageUrl,
+        createdAt: new Date(),
+      });
+
+      await message.save();
+
+      logger.info(
+        `Mensaje guardado: ${from} → ${to}${imageUrl ? ' (con imagen)' : ''}`,
+      );
+      return message;
+    } catch (error) {
+      logger.error(`Error al guardar mensaje: ${error}`);
+      throw error;
+    }
+  }
+
+  async deleteChatMessage(messageId: string, userId: string) {
+    try {
+      if (!Types.ObjectId.isValid(messageId)) {
+        return {
+          success: false,
+          status: 400,
+          message: 'ID de mensaje inválido',
+        };
+      }
+
+      const message = await ChatMessageModel.findById(messageId);
+
+      if (!message) {
+        return {
+          success: false,
+          status: 404,
+          message: 'Mensaje no encontrado',
+        };
+      }
+
+      if (message.from !== userId) {
+        return {
+          success: false,
+          status: 403,
+          message: 'No tienes permiso para eliminar este mensaje',
+        };
+      }
+
+      let deletedImage = false;
+      if ((message as any).imageUrl) {
+        try {
+          const filename = (message as any).imageUrl.split('/').pop();
+          if (filename) {
+            const filePath = path.join(
+              __dirname,
+              '..',
+              'public',
+              'uploads',
+              'friend-chat',
+              filename,
+            );
+
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              deletedImage = true;
+              logger.info(`Imagen de chat eliminada: ${filePath}`);
+            }
+          }
+        } catch (error) {
+          logger.error(`Error al eliminar imagen de chat: ${error}`);
+        }
+      }
+
+      await ChatMessageModel.findByIdAndDelete(messageId);
+
+      const chatRoomId = [message.from, message.to].sort().join(':');
+      io.to(chatRoomId).emit('chat:messageDeleted', {
+        messageId: messageId,
+        from: message.from,
+        to: message.to,
+      });
+
+      logger.info(
+        `Mensaje de chat eliminado: ${messageId} por usuario ${userId}`,
+      );
+
+      return {
+        success: true,
+        message: 'Mensaje eliminado correctamente',
+        deletedImage,
+      };
+    } catch (error) {
+      logger.error(`Error en deleteChatMessage: ${error}`);
+      return {
+        success: false,
+        status: 500,
+        message: 'Error al eliminar el mensaje',
+      };
+    }
   }
 }
 

@@ -15,6 +15,7 @@ import gamificacionService from './services/gamificacionServices';
 import aiRoutes from './routes/aiRoutes';
 import notificacionRoutes from './routes/notificacionRoutes';
 import notificacionService from './services/notificacionServices';
+import { cleanupOldEventPhotos } from './controller/eventoController';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { logger } from './config/logger';
@@ -47,7 +48,18 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+app.use(
+  '/uploads/profile-photos',
+  express.static(path.join(__dirname, 'public', 'uploads', 'profile-photos')),
+);
+app.use(
+  '/uploads/event-chat',
+  express.static(path.join(__dirname, 'public', 'uploads', 'event-chat')),
+);
+app.use(
+  '/uploads/friend-chat',
+  express.static(path.join(__dirname, 'public', 'uploads', 'friend-chat')),
+);
 
 app.use('/uploads', (req, res, next) => {
   logger.info(`📂 Archivo solicitado: ${req.url}`);
@@ -87,10 +99,7 @@ async function checkEventReminders() {
     );
 
     for (const evento of upcomingEvents) {
-      const participantes = (evento.participantes || []) as unknown as {
-        _id: mongoose.Types.ObjectId;
-        username: string;
-      }[];
+      const participantes = evento.participantes as any[];
 
       for (const participante of participantes) {
         if (participante && participante._id) {
@@ -152,6 +161,12 @@ mongoose
     );
     cleanupOldNotificaciones();
 
+    setInterval(cleanupOldEventPhotos, 24 * 60 * 60 * 1000);
+    logger.info(
+      '🗑️ Cron job de limpieza de fotos de eventos iniciado (cada 24 horas)',
+    );
+    cleanupOldEventPhotos();
+
     httpServer.listen(PORT, () => {
       logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
       logger.info(`Swagger docs en http://localhost:${PORT}/api-docs`);
@@ -194,6 +209,17 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('user:force_offline', async (userId: string) => {
+    try {
+      if (!userId) return;
+      await usuarioServices.setUserOffline(userId);
+      io.emit('user:offline', { userId });
+      logger.info(`🌙 Usuario en modo invisible (background): ${userId}`);
+    } catch (err) {
+      logger.error(`Error en user:force_offline: ${err}`);
+    }
+  });
+
   socket.on('disconnect', async () => {
     try {
       const data = socket.data as SocketData;
@@ -221,41 +247,53 @@ io.on('connection', (socket) => {
 
   socket.on(
     'chat:message',
-    async (payload: { from: string; to: string; text: string }) => {
+    async (payload: {
+      from: string;
+      to: string;
+      text: string;
+      imageUrl?: string;
+    }) => {
       try {
-        const { from, to, text } = payload;
-        if (!from || !to || !text || !text.trim()) return;
+        const { from, to, text, imageUrl } = payload;
+        if (!from || !to) return;
+        if ((!text || !text.trim()) && !imageUrl) return;
 
-        const profanityResult = ProfanityFilter.check(text);
-        if (!profanityResult.isClean) {
-          socket.emit('chat:error', {
-            message: ProfanityFilter.getErrorMessage(
-              profanityResult.foundWords,
-              'es',
-            ),
-            code: 'INAPPROPRIATE_CONTENT',
-          });
-          return;
+        if (text && text.trim()) {
+          const profanityResult = ProfanityFilter.check(text);
+          if (!profanityResult.isClean) {
+            socket.emit('chat:error', {
+              message: ProfanityFilter.getErrorMessage(
+                profanityResult.foundWords,
+                'es',
+              ),
+              code: 'INAPPROPRIATE_CONTENT',
+            });
+            return;
+          }
         }
 
         try {
           const savedMessage = await usuarioServices.addChatMessage(
             from,
             to,
-            text.trim(),
+            text ? text.trim() : '',
+            imageUrl,
           );
           const msg = {
             _id: String((savedMessage as { _id: mongoose.Types.ObjectId })._id),
             from: savedMessage.from,
             to: savedMessage.to,
             text: savedMessage.text,
+            imageUrl: (savedMessage as any).imageUrl,
             createdAt: savedMessage.createdAt,
           };
 
           const roomId = getChatRoomId(from, to);
           io.to(roomId).emit('chat:message', msg);
 
-          logger.info(`💬 Mensaje guardado: ${from} → ${to}`);
+          logger.info(
+            `💬 Mensaje guardado: ${from} → ${to}${imageUrl ? ' (con imagen)' : ''}`,
+          );
 
           const chatRoom = io.sockets.adapter.rooms.get(roomId);
           const recipientInChat =
@@ -300,7 +338,8 @@ io.on('connection', (socket) => {
             _id: new mongoose.Types.ObjectId().toString(),
             from,
             to,
-            text: text.trim(),
+            text: text ? text.trim() : '',
+            imageUrl,
             createdAt: new Date(),
           };
           const roomId = getChatRoomId(from, to);
@@ -334,21 +373,26 @@ io.on('connection', (socket) => {
       userId: string;
       username: string;
       text: string;
+      imageUrl?: string;
     }) => {
       try {
-        const { eventId, userId, username, text } = payload;
-        if (!eventId || !userId || !username || !text || !text.trim()) return;
+        const { eventId, userId, username, text, imageUrl } = payload;
 
-        const profanityResult = ProfanityFilter.check(text);
-        if (!profanityResult.isClean) {
-          socket.emit('chat:error', {
-            message: ProfanityFilter.getErrorMessage(
-              profanityResult.foundWords,
-              'es',
-            ),
-            code: 'INAPPROPRIATE_CONTENT',
-          });
-          return;
+        if (!eventId || !userId || !username) return;
+        if ((!text || !text.trim()) && !imageUrl) return;
+
+        if (text && text.trim()) {
+          const profanityResult = ProfanityFilter.check(text);
+          if (!profanityResult.isClean) {
+            socket.emit('chat:error', {
+              message: ProfanityFilter.getErrorMessage(
+                profanityResult.foundWords,
+                'es',
+              ),
+              code: 'INAPPROPRIATE_CONTENT',
+            });
+            return;
+          }
         }
 
         try {
@@ -356,7 +400,8 @@ io.on('connection', (socket) => {
             eventId,
             userId,
             username,
-            text.trim(),
+            text ? text.trim() : '',
+            imageUrl,
           );
 
           const msg = {
@@ -365,6 +410,7 @@ io.on('connection', (socket) => {
             userId: savedMessage.userId,
             username: savedMessage.username,
             text: savedMessage.text,
+            imageUrl: (savedMessage as any).imageUrl,
             createdAt: savedMessage.createdAt,
           };
 
@@ -372,7 +418,7 @@ io.on('connection', (socket) => {
           io.to(roomId).emit('eventChat:message', msg);
 
           logger.info(
-            `🎉 Mensaje de evento guardado: ${username} en ${eventId}`,
+            `🎉 Mensaje de evento guardado: ${username} en ${eventId}${imageUrl ? ' (con imagen)' : ''}`,
           );
         } catch (saveError) {
           logger.error(`Error al guardar mensaje de evento: ${saveError}`);
@@ -381,7 +427,8 @@ io.on('connection', (socket) => {
             eventId,
             userId,
             username,
-            text: text.trim(),
+            text: text ? text.trim() : '',
+            imageUrl,
             createdAt: new Date(),
           };
           const roomId = getEventRoomId(eventId);

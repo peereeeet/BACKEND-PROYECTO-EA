@@ -27,7 +27,12 @@ import {
   postHeartbeat,
   blockUser,
   unblockUser,
+  checkGoogleUser,
   getBlockedUsers,
+  updateInterests,
+  deleteEventChatMessage,
+  uploadChatImage,
+  deleteChatMessage,
 } from '../controller/usuarioController';
 import {
   validateUserContent,
@@ -40,6 +45,7 @@ import {
 } from '../auth/middleware';
 import { registerValidation } from '../userValidators';
 import { uploadProfilePhoto as uploadPhotoMiddleware } from '../config/uploadConfig';
+import { uploadFriendChatImage } from '../config/uploadConfig';
 
 const router = Router();
 
@@ -375,6 +381,59 @@ router.patch(
  *         description: Usuario no encontrado
  */
 router.put('/:id/addEvent', authenticateadminToken, addEventToUser);
+
+/**
+ * @swagger
+ * /api/user/auth/login:
+ *   post:
+ *     summary: Iniciar sesión de usuario
+ *     tags: [Autenticación]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login exitoso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 user:
+ *                   $ref: '#/components/schemas/Usuario'
+ *       401:
+ *         description: Credenciales incorrectas
+ */
+router.post('/auth/login', loginUser);
+
+router.post('/auth/google', loginWithGoogle);
+
+router.post('/auth/google/check', checkGoogleUser);
+
+/**
+ * @swagger
+ * /api/user/auth/create-admin:
+ *   post:
+ *     summary: Crear usuario admin (solo desarrollo)
+ *     tags: [Autenticación]
+ *     responses:
+ *       200:
+ *         description: Usuario admin creado/verificado
+ */
+router.post('/auth/create-admin', createAdminUser);
 
 /**
  * @swagger
@@ -755,6 +814,35 @@ router.post('/:id/heartbeat', authenticateOwner, postHeartbeat);
 
 /**
  * @swagger
+ * /api/user/interests:
+ *   post:
+ *     summary: Actualizar los intereses del usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               interests:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Intereses actualizados
+ *       401:
+ *         description: No autenticado
+ *       500:
+ *         description: Error del servidor
+ */
+router.post('/interests/update', authenticateToken, updateInterests);
+
+/**
+ * @swagger
  * /api/user/{userId}/chat/{friendId}:
  *   get:
  *     summary: Obtener mensajes de chat entre dos usuarios
@@ -876,5 +964,107 @@ router.post(
   validateMessageContent,
   postEventChatMessage,
 );
+
+/**
+ * @swagger
+ * /api/user/events/chat/{messageId}:
+ *   delete:
+ *     summary: Eliminar un mensaje del chat de evento
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del mensaje a eliminar
+ *     responses:
+ *       200:
+ *         description: Mensaje eliminado correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: No tienes permiso para eliminar este mensaje
+ *       404:
+ *         description: Mensaje no encontrado
+ */
+router.delete(
+  '/events/chat/:messageId',
+  authenticateToken,
+  deleteEventChatMessage,
+);
+
+/**
+ * @swagger
+ * /api/user/{userId}/chat/{friendId}/image:
+ *   post:
+ *     summary: Subir una imagen al chat con un amigo
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: friendId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Imagen subida correctamente
+ *       401:
+ *         description: No autenticado
+ *       400:
+ *         description: Error en la solicitud
+ */
+router.post(
+  '/:userId/chat/:friendId/image',
+  authenticateToken,
+  uploadFriendChatImage.single('image'),
+  uploadChatImage,
+);
+
+/**
+ * @swagger
+ * /api/user/chat/{messageId}:
+ *   delete:
+ *     summary: Eliminar un mensaje del chat con amigo
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del mensaje a eliminar
+ *     responses:
+ *       200:
+ *         description: Mensaje eliminado correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: No tienes permiso para eliminar este mensaje
+ *       404:
+ *         description: Mensaje no encontrado
+ */
+router.delete('/chat/:messageId', authenticateToken, deleteChatMessage);
 
 export default router;

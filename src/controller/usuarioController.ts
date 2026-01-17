@@ -20,17 +20,21 @@ export async function createUser(
 ): Promise<Response> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    logger.error(`Errores de validación al crear usuario:${errors.array()}`);
+    logger.error(
+      `Errores de validación al crear usuario: ${JSON.stringify(errors.array())}`,
+    );
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { username, gmail, password, birthday, rol } = req.body as IUsuario;
+    const { username, gmail, password, birthday, rol, interests } =
+      req.body as IUsuario;
     const newUser: Partial<IUsuario> = {
       username,
       gmail,
       password,
       birthday,
       rol: rol || 'usuario',
+      interests: interests || [],
     };
     const user = await userService.createUser(newUser);
     logger.info(`Usuario creado: ${user!.username}`);
@@ -97,7 +101,7 @@ export async function checkUserExistsForReset(req: Request, res: Response) {
       return res.status(400).json({ message: 'Falta email o usuario.' });
     }
 
-    const user = await userService.findUserByEmailOrUsername(emailOrUsername); // { _id, username, gmail } | null
+    const user = await userService.findUserByEmailOrUsername(emailOrUsername);
     if (!user) return res.json({ exists: false });
 
     return res.json({
@@ -251,7 +255,7 @@ export async function updateOwnProfile(
   res: Response,
 ): Promise<Response> {
   try {
-    const authId = (req as any)?.user?.payload?.id;
+    const authId = (req as any)?.user?.id || (req as any)?.user?.payload?.id;
     const { id } = req.params;
 
     if (!authId || authId !== id) {
@@ -267,8 +271,8 @@ export async function updateOwnProfile(
       return res.status(400).json({ error: 'ID invalido' });
     }
 
-    const { username, gmail, password, birthday } =
-      req.body as Partial<IUsuario>;
+    const { username, gmail, password, birthday, interests } =
+      req.body as Partial<IUsuario & { interests?: string[] }>;
 
     const user = await Usuario.findById(id);
     if (!user) {
@@ -280,6 +284,7 @@ export async function updateOwnProfile(
     if (typeof gmail === 'string') user.gmail = gmail;
     if (birthday !== undefined)
       user.birthday = new Date(String(birthday)) as any;
+    if (Array.isArray(interests)) user.interests = interests;
     if (typeof password === 'string' && password.trim() !== '') {
       user.password = password;
     }
@@ -547,9 +552,54 @@ export async function loginUser(
   }
 }
 
+export async function checkGoogleUser(req: Request, res: Response) {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ message: 'Falta el token de Google' });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(400).json({ message: 'Token de Google no válido' });
+    }
+
+    const gmail = payload.email;
+    const user = await Usuario.findOne({ gmail });
+
+    if (user) {
+      return res.status(200).json({
+        exists: true,
+        needsData: !user.birthday,
+        hasUsername: !!user.username,
+        hasBirthday: !!user.birthday,
+      });
+    } else {
+      const suggestedName =
+        payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
+      return res.status(200).json({
+        exists: false,
+        needsData: true,
+        suggestedUsername: suggestedName,
+      });
+    }
+  } catch (error) {
+    logger.error(`Error en checkGoogleUser: ${error}`);
+    return res
+      .status(500)
+      .json({ message: 'Error al verificar usuario de Google' });
+  }
+}
+
 export async function loginWithGoogle(req: Request, res: Response) {
   try {
-    const { credential, birthday } = req.body;
+    const { credential, birthday, username, interests } = req.body;
 
     if (!credential) {
       return res.status(400).json({ message: 'Falta el token de Google' });
@@ -567,7 +617,8 @@ export async function loginWithGoogle(req: Request, res: Response) {
 
     const gmail = payload.email;
     const googleId = payload.sub || null;
-    const name =
+
+    const suggestedName =
       payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
 
     let birthdayDate: Date | undefined = undefined;
@@ -578,29 +629,37 @@ export async function loginWithGoogle(req: Request, res: Response) {
       }
     }
 
-    if (!birthdayDate) {
-      const rawBirth = (payload as any).birthdate || (payload as any).birthday;
-      if (rawBirth) {
-        const parsed = new Date(rawBirth as string);
-        if (!Number.isNaN(parsed.getTime())) {
-          birthdayDate = parsed;
-        }
-      }
-    }
+    const userInterests: string[] = Array.isArray(interests) ? interests : [];
 
     let user = await Usuario.findOne({ gmail });
 
     if (!user) {
+      const finalUsername = username?.trim() || suggestedName;
+
+      const existingUsername = await Usuario.findOne({
+        username: finalUsername,
+      });
+      if (existingUsername) {
+        return res.status(400).json({
+          message: 'USERNAME_EXISTS',
+          detail: 'Este nombre de usuario ya está en uso',
+        });
+      }
+
       user = new Usuario({
-        username: name,
+        username: finalUsername,
         gmail,
         birthday: birthdayDate,
         rol: 'usuario',
         isGoogleUser: true,
         googleId,
+        interests: userInterests,
       } as Partial<IUsuario>);
 
       await user.save();
+      logger.info(
+        `✅ Nuevo usuario creado con Google: ${finalUsername}, intereses: ${userInterests.length}`,
+      );
     } else {
       if (!user.isGoogleUser) {
         return res.status(400).json({
@@ -617,6 +676,13 @@ export async function loginWithGoogle(req: Request, res: Response) {
       if (!user.birthday && birthdayDate) {
         user.birthday = birthdayDate;
         mustSave = true;
+      }
+      if (userInterests.length > 0) {
+        user.interests = userInterests;
+        mustSave = true;
+        logger.info(
+          `📝 Actualizando intereses para usuario existente: ${user.username}`,
+        );
       }
       if (mustSave) {
         await user.save();
@@ -642,7 +708,6 @@ export async function loginWithGoogle(req: Request, res: Response) {
   }
 }
 
-/* Create admin only development */
 export async function createAdminUser(
   req: Request,
   res: Response,
@@ -805,12 +870,54 @@ export async function listFriends(req: Request, res: Response) {
 export async function sendFriendRequest(req: Request, res: Response) {
   try {
     const { id, targetId } = req.body;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(targetId)
+    ) {
+      return res.status(400).json({ ok: false, message: 'IDs inválidos' });
+    }
+
+    if (id === targetId) {
+      return res.status(400).json({
+        ok: false,
+        message: 'No puedes enviarte una solicitud a ti mismo',
+      });
+    }
+
     const result = await userService.sendFriendRequest(id, targetId);
-    logger.info(`Solicitud de amistad enviada: from: ${id}, to: ${targetId}`);
-    res.status(200).json(result);
-  } catch (error: any) {
-    logger.error('Error en sendFriendRequest:', error);
-    res.status(400).json({ error: error.message });
+
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+
+    try {
+      const { io } = await import('../index');
+      const fromUser = await Usuario.findById(id)
+        .select('username gmail')
+        .lean();
+
+      if (io && fromUser) {
+        io.to(`user:${targetId}`).emit('friendRequest:received', {
+          fromUserId: id,
+          fromUsername: fromUser.username,
+          fromGmail: fromUser.gmail,
+        });
+        logger.info(
+          `🔔 Evento friendRequest:received enviado a user:${targetId}`,
+        );
+      }
+    } catch (socketError) {
+      logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    logger.error(`Error en sendFriendRequest: ${String(error)}`);
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al enviar solicitud de amistad',
+    });
   }
 }
 
@@ -829,28 +936,92 @@ export const getSentRequests = async (req: Request, res: Response) => {
 export async function acceptFriendRequest(req: Request, res: Response) {
   try {
     const { id, requesterId } = req.body;
-    const result = await userService.acceptFriendRequest(id, requesterId);
-    logger.info(
-      `Solicitud de amistad aceptada: by: ${id}, from: ${requesterId}`,
-    );
-    res.status(200).json(result);
-  } catch (error: any) {
-    logger.error('Error en acceptFriendRequest:', error);
-    res.status(400).json({ error: error.message });
+
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(requesterId)
+    ) {
+      return res.status(400).json({ ok: false, message: 'IDs inválidos' });
+    }
+
+    const updatedUser = await userService.acceptFriendRequest(id, requesterId);
+
+    if (!updatedUser) {
+      return res
+        .status(404)
+        .json({ ok: false, message: 'Usuario no encontrado' });
+    }
+
+    try {
+      const { io } = await import('../index');
+      if (io) {
+        io.to(`user:${id}`).emit('friendRequest:updated', {
+          type: 'accepted',
+          userId: requesterId,
+        });
+        logger.info(`🔔 Evento friendRequest:updated enviado a user:${id}`);
+      }
+    } catch (socketError) {
+      logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: 'Solicitud aceptada',
+      user: updatedUser,
+    });
+  } catch (error) {
+    logger.error(`Error en acceptFriendRequest: ${String(error)}`);
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al aceptar solicitud de amistad',
+    });
   }
 }
 
 export async function rejectFriendRequest(req: Request, res: Response) {
   try {
     const { id, requesterId } = req.body;
-    const result = await userService.rejectFriendRequest(id, requesterId);
-    logger.info(
-      `Solicitud de amistad rechazada: by: ${id}, from: ${requesterId}`,
-    );
-    res.status(200).json(result);
-  } catch (error: any) {
-    logger.error('Error en rejectFriendRequest:', error);
-    res.status(400).json({ error: error.message });
+
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(requesterId)
+    ) {
+      return res.status(400).json({ ok: false, message: 'IDs inválidos' });
+    }
+
+    const updatedUser = await userService.rejectFriendRequest(id, requesterId);
+
+    if (!updatedUser) {
+      return res
+        .status(404)
+        .json({ ok: false, message: 'Usuario no encontrado' });
+    }
+
+    try {
+      const { io } = await import('../index');
+      if (io) {
+        io.to(`user:${id}`).emit('friendRequest:updated', {
+          type: 'rejected',
+          userId: requesterId,
+        });
+        logger.info(`🔔 Evento friendRequest:updated enviado a user:${id}`);
+      }
+    } catch (socketError) {
+      logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: 'Solicitud rechazada',
+      user: updatedUser,
+    });
+  } catch (error) {
+    logger.error(`Error en rejectFriendRequest: ${String(error)}`);
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al rechazar solicitud de amistad',
+    });
   }
 }
 
@@ -1043,7 +1214,136 @@ export async function getBlockedUsers(req: Request, res: Response) {
     const users = await userService.getBlockedUsers(id);
     res.status(200).json(users);
   } catch (error: any) {
-    logger.error('Error en getBlockedUsers:', error);
     res.status(400).json({ error: error.message });
   }
 }
+
+export async function updateInterests(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = (req as any).user?.id;
+    const { interests } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!Array.isArray(interests)) {
+      return res
+        .status(400)
+        .json({ message: 'Interests debe ser un array de strings' });
+    }
+
+    const user = await Usuario.findByIdAndUpdate(
+      userId,
+      { interests },
+      { new: true },
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    logger.info(`Intereses actualizados para el usuario ${userId}`);
+    return res.status(200).json({ ok: true, user });
+  } catch (error) {
+    logger.error(`Error al actualizar intereses: ${error}`);
+    return res.status(500).json({ message: 'Error al actualizar intereses' });
+  }
+}
+
+export async function deleteEventChatMessage(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { messageId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const result = await userService.deleteEventChatMessage(messageId, userId);
+
+    if (!result.success) {
+      return res.status(result.status || 400).json({ message: result.message });
+    }
+
+    logger.info(
+      `Mensaje de chat eliminado: ${messageId} por usuario ${userId}`,
+    );
+    return res.status(200).json({
+      message: result.message,
+      messageId,
+      deletedImage: result.deletedImage,
+    });
+  } catch (error) {
+    logger.error(`Error al eliminar mensaje de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al eliminar el mensaje' });
+  }
+}
+
+export const uploadChatImage = async (req: Request, res: Response) => {
+  try {
+    const { friendId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ message: 'No se ha proporcionado ninguna imagen' });
+    }
+
+    const imageUrl = `/uploads/friend-chat/${req.file.filename}`;
+
+    logger.info(
+      `Imagen de chat subida: ${imageUrl} de ${userId} a ${friendId}`,
+    );
+    return res.status(200).json({
+      ok: true,
+      imageUrl,
+    });
+  } catch (error) {
+    logger.error(`Error al subir imagen de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al subir la imagen' });
+  }
+};
+
+export const deleteChatMessage = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  try {
+    const { messageId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const result = await userService.deleteChatMessage(messageId, userId);
+
+    if (!result.success) {
+      return res.status(result.status || 400).json({ message: result.message });
+    }
+
+    logger.info(
+      `Mensaje de chat eliminado: ${messageId} por usuario ${userId}`,
+    );
+    return res.status(200).json({
+      message: result.message,
+      messageId,
+      deletedImage: result.deletedImage,
+    });
+  } catch (error) {
+    logger.error(`Error al eliminar mensaje de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al eliminar el mensaje' });
+  }
+};
