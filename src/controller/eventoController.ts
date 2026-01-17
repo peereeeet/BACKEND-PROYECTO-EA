@@ -4,6 +4,7 @@ import { Evento, EventoPhoto } from '../models/evento';
 import { Usuario } from '../models/usuario';
 import { logger } from '../config/logger';
 import { Types } from 'mongoose';
+import notificacionService from '../services/notificacionServices';
 import fs from 'fs';
 import path from 'path';
 
@@ -134,6 +135,44 @@ export async function createEvento(
     logger.info(
       `Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, maxParticipantes: ${maxParticipantesNum}`,
     );
+
+    // Enviar notificaciones a los usuarios invitados
+    if (isPrivate && invitacionesPendientesIds.length > 0) {
+      const creadorUser = await Usuario.findById(creadorId).select('username');
+      const creadorUsername = creadorUser?.username || 'Usuario';
+
+      for (const userId of invitacionesPendientesIds) {
+        try {
+          // Emitir evento WebSocket
+          const { io } = await import('../index');
+          io.to(`user:${userId}`).emit('eventInvitation:received', {
+            fromUserId: creadorId,
+            fromUsername: creadorUsername,
+            eventId: created._id.toString(),
+            eventName: name,
+          });
+
+          logger.info(
+            `🔔 Evento eventInvitation:received enviado a user:${userId}`,
+          );
+
+          // Crear notificación persistente
+          await notificacionService.notifyEventInvitation(
+            userId,
+            creadorId,
+            creadorUsername,
+            created._id.toString(),
+            name,
+          );
+
+          logger.info(
+            `📧 Notificación persistente creada para usuario ${userId}`,
+          );
+        } catch (err) {
+          logger.error(`Error enviando notificación a ${userId}: ${err}`);
+        }
+      }
+    }
 
     return res.status(201).json(populated ?? created);
   } catch (error) {
@@ -773,27 +812,10 @@ export async function inviteUsersToPrivateEvent(
         .json({ message: 'Debe proporcionar una lista de IDs de usuarios' });
     }
 
-    const evento = await Evento.findById(eventoId);
-    if (!evento) {
-      return res.status(404).json({ message: 'Evento no encontrado' });
-    }
-
-    if (!evento.isPrivate) {
-      return res.status(400).json({ message: 'El evento no es privado' });
-    }
-
-    const creadorIdInvite = (evento.creador as any)?._id
-      ? String((evento.creador as any)._id)
-      : String(evento.creador);
-    if (creadorIdInvite !== userId.toString()) {
-      return res
-        .status(403)
-        .json({ message: 'Solo el creador puede invitar usuarios' });
-    }
-
     const eventoActualizado = await eventoService.inviteUsersToEvent(
       eventoId,
       userIds,
+      userId,
     );
 
     return res.status(200).json({

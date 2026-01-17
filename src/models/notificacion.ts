@@ -3,7 +3,14 @@ import { Schema, model, Types, Document } from 'mongoose';
 export interface INotificacion extends Document {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
-  type: 'friend_request' | 'friend_accepted' | 'event_join' | 'event_reminder' | 'new_message' | 'event_spot_available';
+  type:
+    | 'friend_request'
+    | 'friend_accepted'
+    | 'event_join'
+    | 'event_reminder'
+    | 'new_message'
+    | 'event_spot_available'
+    | 'event_invitation';
   title: string;
   message: string;
   relatedUserId?: Types.ObjectId;
@@ -15,30 +22,57 @@ export interface INotificacion extends Document {
   actionUrl?: string;
 }
 
-const notificacionSchema = new Schema<INotificacion>({
-  userId: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true, index: true },
-  type: { 
-    type: String, 
-    required: true,
-    enum: ['friend_request', 'friend_accepted', 'event_join', 'event_reminder', 'new_message', 'event_spot_available'],
-    index: true
+const notificacionSchema = new Schema<INotificacion>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Usuario',
+      required: true,
+      index: true,
+    },
+    type: {
+      type: String,
+      required: true,
+      enum: [
+        'friend_request',
+        'friend_accepted',
+        'event_join',
+        'event_reminder',
+        'new_message',
+        'event_spot_available',
+        'event_invitation',
+      ],
+      index: true,
+    },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    relatedUserId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Usuario',
+      default: null,
+    },
+    relatedEventId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Evento',
+      default: null,
+    },
+    relatedUsername: { type: String, default: null },
+    relatedEventName: { type: String, default: null },
+    read: { type: Boolean, default: false, index: true },
+    createdAt: { type: Date, default: Date.now, index: true },
+    actionUrl: { type: String, default: null },
   },
-  title: { type: String, required: true },
-  message: { type: String, required: true },
-  relatedUserId: { type: Schema.Types.ObjectId, ref: 'Usuario', default: null },
-  relatedEventId: { type: Schema.Types.ObjectId, ref: 'Evento', default: null },
-  relatedUsername: { type: String, default: null },
-  relatedEventName: { type: String, default: null },
-  read: { type: Boolean, default: false, index: true },
-  createdAt: { type: Date, default: Date.now, index: true },
-  actionUrl: { type: String, default: null }
-}, {
-  timestamps: false,
-  versionKey: false
-});
+  {
+    timestamps: false,
+    versionKey: false,
+  },
+);
 
 notificacionSchema.index({ userId: 1, read: 1, createdAt: -1 });
 notificacionSchema.index({ userId: 1, type: 1 });
 
-export const Notificacion = model<INotificacion>('Notificacion', notificacionSchema);
+export const Notificacion = model<INotificacion>(
+  'Notificacion',
+  notificacionSchema,
+);
 export default Notificacion;

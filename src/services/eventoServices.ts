@@ -529,17 +529,94 @@ export class EventoService {
   async inviteUsersToEvent(
     eventoId: string,
     userIds: string[],
+    creadorId: string,
   ): Promise<IEvento | null> {
-    const evento = await Evento.findById(eventoId);
-    if (!evento) return null;
+    if (!Types.ObjectId.isValid(eventoId)) {
+      throw new Error('ID de evento inválido');
+    }
 
-    const objectIds = userIds.map((id) => new Types.ObjectId(id));
+    const evento = await Evento.findById(eventoId).populate(
+      'creador',
+      '_id username gmail',
+    );
 
-    return await Evento.findByIdAndUpdate(
-      eventoId,
-      { $addToSet: { invitacionesPendientes: { $each: objectIds } } },
-      { new: true },
-    )
+    if (!evento) {
+      throw new Error('Evento no encontrado');
+    }
+
+    if (!evento.isPrivate) {
+      throw new Error('Solo se pueden enviar invitaciones a eventos privados');
+    }
+
+    const creadorIdStr = (evento.creador as any)?._id
+      ? String((evento.creador as any)._id)
+      : String(evento.creador);
+
+    if (creadorIdStr !== creadorId) {
+      throw new Error('Solo el creador puede invitar usuarios');
+    }
+
+    const creadorUsername = (evento.creador as any)?.username || 'Usuario';
+
+    // Procesar cada invitación
+    for (const userId of userIds) {
+      if (!Types.ObjectId.isValid(userId)) {
+        logger.warn(`ID de usuario inválido: ${userId}`);
+        continue;
+      }
+
+      const userObjectId = new Types.ObjectId(userId);
+
+      // Verificar si ya está invitado o es participante
+      const yaInvitado = evento.invitacionesPendientes.some(
+        (id) => String(id) === userId,
+      );
+      const yaParticipante = evento.participantes.some(
+        (id) => String(id) === userId,
+      );
+
+      if (yaInvitado || yaParticipante) {
+        logger.info(`Usuario ${userId} ya está invitado o es participante`);
+        continue;
+      }
+
+      // Agregar a invitaciones pendientes
+      await Evento.updateOne(
+        { _id: eventoId },
+        { $addToSet: { invitacionesPendientes: userObjectId } },
+      );
+
+      logger.info(
+        `✅ Usuario ${userId} agregado a invitacionesPendientes del evento ${eventoId}`,
+      );
+
+      // Emitir evento WebSocket en tiempo real
+      const { io } = await import('../index');
+      io.to(`user:${userId}`).emit('eventInvitation:received', {
+        fromUserId: creadorId,
+        fromUsername: creadorUsername,
+        eventId: eventoId,
+        eventName: evento.name,
+      });
+
+      logger.info(
+        `🔔 Evento eventInvitation:received enviado a user:${userId}`,
+      );
+
+      // Crear notificación persistente
+      await notificacionService.notifyEventInvitation(
+        userId,
+        creadorId,
+        creadorUsername,
+        eventoId,
+        evento.name,
+      );
+
+      logger.info(`📧 Notificación persistente creada para usuario ${userId}`);
+    }
+
+    // Retornar el evento actualizado
+    return await Evento.findById(eventoId)
       .populate('creador', 'username gmail')
       .populate('invitados', 'username gmail')
       .populate('invitacionesPendientes', 'username gmail');
