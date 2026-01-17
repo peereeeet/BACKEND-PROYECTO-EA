@@ -10,7 +10,6 @@ import { UserService } from '../services/usuarioServices';
 const userService = new UserService();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// 60 seconds cooldown for resending
 const RESEND_COOLDOWN_MS = 60 * 1000;
 
 export async function register(req: Request, res: Response): Promise<Response> {
@@ -38,7 +37,7 @@ export async function register(req: Request, res: Response): Promise<Response> {
       rol: 'usuario',
       accountStatus: 'PENDING_EMAIL',
       otpHash,
-      otpExpires: new Date(Date.now() + 15 * 60 * 1000), // 15 min
+      otpExpires: new Date(Date.now() + 15 * 60 * 1000),
       otpAttempts: 0,
       otpLastSentAt: new Date(),
       otpPurpose: 'VERIFY_EMAIL',
@@ -69,7 +68,7 @@ export async function verifyEmail(
       return res.status(400).json({ error: 'MISSING_FIELDS' });
     }
 
-    const gmail = email; // Map email input to gmail model field
+    const gmail = email;
 
     const user = await Usuario.findOne({ gmail });
     if (!user) {
@@ -104,7 +103,6 @@ export async function verifyEmail(
       return res.status(400).json({ error: 'INVALID_CODE' });
     }
 
-    // Success
     user.accountStatus = 'ACTIVE';
     user.otpHash = null;
     user.otpExpires = null;
@@ -127,17 +125,16 @@ export async function resendVerificationCode(
 ): Promise<Response> {
   try {
     const { email } = req.body;
-    const gmail = email; // Map email input to gmail model field
+    const gmail = email;
     const user = await Usuario.findOne({ gmail });
 
     if (!user) {
       return res.status(404).json({ error: 'USER_NOT_FOUND' });
     }
     if (user.accountStatus === 'ACTIVE') {
-      return res.status(200).json({ message: 'ALREADY_VERIFIED' }); // Idempotent
+      return res.status(200).json({ message: 'ALREADY_VERIFIED' });
     }
 
-    // Rate Limit
     if (user.otpLastSentAt) {
       const diff = Date.now() - user.otpLastSentAt.getTime();
       if (diff < RESEND_COOLDOWN_MS) {
@@ -152,7 +149,7 @@ export async function resendVerificationCode(
     user.otpExpires = new Date(Date.now() + 15 * 60 * 1000);
     user.otpAttempts = 0;
     user.otpLastSentAt = new Date();
-    user.otpPurpose = 'VERIFY_EMAIL'; // Ensure purpose matches endpoint
+    user.otpPurpose = 'VERIFY_EMAIL';
     await user.save();
 
     await emailService.sendVerificationEmail(gmail, otp);
@@ -173,13 +170,11 @@ export async function login(req: Request, res: Response): Promise<Response> {
       return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
     }
 
-    // Use existing compare logic
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
     }
 
-    // Check Google User
     if (user.isGoogleUser) {
       return res.status(400).json({
         error: 'GOOGLE_ACCOUNT',
@@ -187,7 +182,6 @@ export async function login(req: Request, res: Response): Promise<Response> {
       });
     }
 
-    // Check Account Status
     if (user.accountStatus === 'PENDING_EMAIL') {
       return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED' });
     }
@@ -225,13 +219,11 @@ export async function forgotPassword(
     const gmail = email;
     const user = await Usuario.findOne({ gmail });
 
-    // Always 200 generic
     if (!user) {
       logger.debug(`Forgot password para email no existente: ${email}`);
       return res.status(200).json({ message: 'EMAIL_SENT_IF_EXISTS' });
     }
 
-    // Rate Limit
     if (user.otpLastSentAt) {
       const diff = Date.now() - user.otpLastSentAt.getTime();
       if (diff < RESEND_COOLDOWN_MS) {
@@ -243,14 +235,13 @@ export async function forgotPassword(
     const otpHash = await otpService.hashOTP(otp);
 
     user.otpHash = otpHash;
-    user.otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+    user.otpExpires = new Date(Date.now() + 15 * 60 * 1000);
     user.otpAttempts = 0;
     user.otpLastSentAt = new Date();
     user.otpPurpose = 'RESET_PASSWORD';
 
     await user.save();
 
-    // Send email using user.gmail (which matches mapping)
     await emailService.sendPasswordResetEmail(user.gmail, otp);
 
     logger.info(`Forgot password solicitado para: ${gmail}`);
@@ -303,16 +294,12 @@ export async function resetPassword(
       return res.status(400).json({ error: 'INVALID_CODE' });
     }
 
-    // Reset Password
-    user.password = newPassword; // Pre-save hook will hash it
+    user.password = newPassword;
     user.otpHash = null;
     user.otpExpires = null;
     user.otpAttempts = 0;
     user.otpPurpose = null;
 
-    // Also unlock account if needed? Assuming reset makes it active if email was verified.
-    // However, if email was PENDING, maybe we shouldn't verify email here?
-    // Usually reset password proves ownership of email, so we could set to ACTIVE.
     if (user.accountStatus === 'PENDING_EMAIL') {
       user.accountStatus = 'ACTIVE';
     }
@@ -379,7 +366,7 @@ export async function loginWithGoogle(req: Request, res: Response) {
         rol: 'usuario',
         isGoogleUser: true,
         googleId,
-        accountStatus: 'ACTIVE', // Google users are pre-verified
+        accountStatus: 'ACTIVE',
       } as Partial<IUsuario>);
 
       await user.save();

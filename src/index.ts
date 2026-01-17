@@ -5,8 +5,6 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import path from 'path';
 import usuarioRoutes from './routes/usuarioRoutes';
-import swaggerUi from 'swagger-ui-express';
-import swaggerSpec from './config/swagger';
 import eventoRoutes from './routes/eventoRoutes';
 import { UserService } from './services/usuarioServices';
 import valoracionRoutes from './routes/valoracionRoutes';
@@ -66,8 +64,6 @@ app.use('/uploads', (req, res, next) => {
   next();
 });
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
 import authRoutes from './routes/authRoutes';
 
 // Rutas de API
@@ -99,7 +95,10 @@ async function checkEventReminders() {
     );
 
     for (const evento of upcomingEvents) {
-      const participantes = evento.participantes as any[];
+      const participantes = (evento.participantes || []) as unknown as {
+        _id: mongoose.Types.ObjectId;
+        username: string;
+      }[];
 
       for (const participante of participantes) {
         if (participante && participante._id) {

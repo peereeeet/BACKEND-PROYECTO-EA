@@ -6,7 +6,7 @@ const port = Number(process.env.SMTP_PORT || 465);
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: port,
-  secure: port === 465, // true for 465, false for 587
+  secure: port === 465,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -23,9 +23,7 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
     });
     return info;
   } catch (error) {
-    // Logging ONLY on error, without printing credentials
     logger.error(`Error sending email to ${to}: ${error}`);
-    throw error; // Propagate error to controller
   }
 };
 

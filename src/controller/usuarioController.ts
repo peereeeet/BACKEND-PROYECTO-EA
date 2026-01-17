@@ -110,10 +110,10 @@ export async function checkUserExistsForReset(req: Request, res: Response) {
       username: user.username,
       gmail: user.gmail,
     });
-  } catch (err) {
-    const errorMessage =
-      err instanceof Error ? err.message : 'Error al comprobar usuario.';
-    return res.status(500).json({ message: errorMessage });
+  } catch (err: any) {
+    return res
+      .status(500)
+      .json({ message: err?.message || 'Error al comprobar usuario.' });
   }
 }
 
