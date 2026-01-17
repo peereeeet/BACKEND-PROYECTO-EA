@@ -166,7 +166,7 @@ router.get('/recommended', authenticateToken, getRecommendedEventos);
  *       500:
  *         description: Error del servidor
  */
-router.get('/search', searchEventos);
+router.get('/search', authenticateToken, searchEventos);
 
 /**
  * @swagger

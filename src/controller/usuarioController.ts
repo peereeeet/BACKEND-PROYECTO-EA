@@ -26,7 +26,8 @@ export async function createUser(
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { username, gmail, password, birthday, rol, interests } = req.body as IUsuario;
+    const { username, gmail, password, birthday, rol, interests } =
+      req.body as IUsuario;
     const newUser: Partial<IUsuario> = {
       username,
       gmail,
@@ -250,7 +251,7 @@ export async function updateOwnProfile(
   res: Response,
 ): Promise<Response> {
   try {
-    const authId = (req as any)?.user?.payload?.id;
+    const authId = (req as any)?.user?.id || (req as any)?.user?.payload?.id;
     const { id } = req.params;
 
     if (!authId || authId !== id) {
@@ -648,7 +649,9 @@ export async function loginWithGoogle(req: Request, res: Response) {
       } as Partial<IUsuario>);
 
       await user.save();
-      logger.info(`✅ Nuevo usuario creado con Google: ${finalUsername}, intereses: ${userInterests.length}`);
+      logger.info(
+        `✅ Nuevo usuario creado con Google: ${finalUsername}, intereses: ${userInterests.length}`,
+      );
     } else {
       if (!user.isGoogleUser) {
         return res.status(400).json({
@@ -669,7 +672,9 @@ export async function loginWithGoogle(req: Request, res: Response) {
       if (userInterests.length > 0) {
         user.interests = userInterests;
         mustSave = true;
-        logger.info(`📝 Actualizando intereses para usuario existente: ${user.username}`);
+        logger.info(
+          `📝 Actualizando intereses para usuario existente: ${user.username}`,
+        );
       }
       if (mustSave) {
         await user.save();

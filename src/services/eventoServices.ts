@@ -131,7 +131,10 @@ export class EventoService {
   }
 
   async getEventoById(id: string): Promise<IEvento | null> {
-    return await Evento.findById(id);
+    return await Evento.findById(id)
+      .populate('creador', 'username gmail profilePhoto')
+      .populate('participantes', 'username gmail profilePhoto online')
+      .populate('listaEspera', 'username gmail profilePhoto online');
   }
 
   async deleteEventoById(id: string): Promise<IEvento | null> {
@@ -234,42 +237,53 @@ export class EventoService {
 
   private async notificarCreadorSiEsAmigo(
     evento: IEvento,
-    userId: string
+    userId: string,
   ): Promise<void> {
     try {
       let creadorId: string;
-      if (evento.creador && typeof evento.creador === 'object' && '_id' in evento.creador) {
+      if (
+        evento.creador &&
+        typeof evento.creador === 'object' &&
+        '_id' in evento.creador
+      ) {
         creadorId = (evento.creador as any)._id.toString();
       } else {
         creadorId = (evento.creador as Types.ObjectId).toString();
       }
 
       if (creadorId === userId) {
-        logger.info(`Usuario ${userId} es el creador, no se envía notificación`);
+        logger.info(
+          `Usuario ${userId} es el creador, no se envía notificación`,
+        );
         return;
       }
 
-      const creador = await Usuario.findById(creadorId).select('friends').lean();
-      
+      const creador = await Usuario.findById(creadorId)
+        .select('friends')
+        .lean();
+
       if (!creador) {
         logger.warn(`Creador ${creadorId} no encontrado para notificación`);
         return;
       }
 
       const sonAmigos = creador.friends?.some((friendId: any) => {
-        const id = typeof friendId === 'object' && friendId._id 
-          ? friendId._id.toString() 
-          : friendId.toString();
+        const id =
+          typeof friendId === 'object' && friendId._id
+            ? friendId._id.toString()
+            : friendId.toString();
         return id === userId;
       });
 
       if (!sonAmigos) {
-        logger.info(`Usuario ${userId} no es amigo del creador ${creadorId}, no se envía notificación`);
+        logger.info(
+          `Usuario ${userId} no es amigo del creador ${creadorId}, no se envía notificación`,
+        );
         return;
       }
 
       const usuario = await Usuario.findById(userId).select('username').lean();
-      
+
       if (!usuario) {
         logger.warn(`Usuario ${userId} no encontrado para notificación`);
         return;
@@ -280,10 +294,12 @@ export class EventoService {
         userId,
         usuario.username,
         evento._id.toString(),
-        evento.name
+        evento.name,
       );
 
-      logger.info(`✅ Notificación enviada: ${usuario.username} se unió al evento "${evento.name}" de su amigo`);
+      logger.info(
+        `✅ Notificación enviada: ${usuario.username} se unió al evento "${evento.name}" de su amigo`,
+      );
     } catch (error) {
       logger.error(`Error en notificarCreadorSiEsAmigo: ${error}`);
     }
@@ -353,11 +369,15 @@ export class EventoService {
         await notificacionService.notifySpotAvailable(
           siguienteUserId.toString(),
           evento._id.toString(),
-          evento.name
+          evento.name,
         );
-        logger.info(`✅ Notificación de plaza disponible enviada a ${siguienteUserId}`);
+        logger.info(
+          `✅ Notificación de plaza disponible enviada a ${siguienteUserId}`,
+        );
       } catch (err) {
-        logger.error(`Error al enviar notificación de plaza disponible: ${err}`);
+        logger.error(
+          `Error al enviar notificación de plaza disponible: ${err}`,
+        );
       }
 
       if (io) {
@@ -715,7 +735,7 @@ export class EventoService {
 
   async getUpcomingEventos(
     page: number = 1,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<{
     data: IEvento[];
     page: number;
@@ -728,7 +748,7 @@ export class EventoService {
 
       const query = {
         schedule: { $gte: now },
-        isPrivate: false
+        isPrivate: false,
       };
 
       const [total, eventos] = await Promise.all([
@@ -741,18 +761,18 @@ export class EventoService {
           .sort({ schedule: 1 })
           .skip(skip)
           .limit(limit)
-          .lean()
+          .lean(),
       ]);
 
       logger.info(
-        `📅 Eventos próximos obtenidos: ${eventos.length} eventos (página ${page}/${Math.ceil(total / limit)})`
+        `📅 Eventos próximos obtenidos: ${eventos.length} eventos (página ${page}/${Math.ceil(total / limit)})`,
       );
 
       return {
         data: eventos as IEvento[],
         page,
         totalPages: Math.ceil(total / limit),
-        totalItems: total
+        totalItems: total,
       };
     } catch (error) {
       logger.error(`Error al obtener eventos próximos: ${error}`);
@@ -763,7 +783,7 @@ export class EventoService {
   async getRecommendedEventos(
     userId: string,
     page: number = 1,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<{
     data: IEvento[];
     page: number;
@@ -772,7 +792,7 @@ export class EventoService {
   }> {
     try {
       const user = await Usuario.findById(userId).select('interests');
-      
+
       if (!user || !user.interests || user.interests.length === 0) {
         return this.getUpcomingEventos(page, limit);
       }
@@ -781,14 +801,14 @@ export class EventoService {
       const skip = (page - 1) * limit;
 
       const now = new Date();
-      
+
       const query: any = {
         schedule: { $gte: now },
         categoria: { $in: userInterests },
         $or: [
           { isPrivate: false },
-          { isPrivate: true, invitados: new Types.ObjectId(userId) }
-        ]
+          { isPrivate: true, invitados: new Types.ObjectId(userId) },
+        ],
       };
 
       const [total, eventos] = await Promise.all([
@@ -801,18 +821,18 @@ export class EventoService {
           .sort({ schedule: 1 })
           .skip(skip)
           .limit(limit)
-          .lean()
+          .lean(),
       ]);
 
       logger.info(
-        `✨ Eventos recomendados obtenidos para usuario ${userId}: ${eventos.length} eventos basados en ${userInterests.length} intereses`
+        `✨ Eventos recomendados obtenidos para usuario ${userId}: ${eventos.length} eventos basados en ${userInterests.length} intereses`,
       );
 
       return {
         data: eventos as IEvento[],
         page,
         totalPages: Math.ceil(total / limit),
-        totalItems: total
+        totalItems: total,
       };
     } catch (error) {
       logger.error(`Error al obtener eventos recomendados: ${error}`);
