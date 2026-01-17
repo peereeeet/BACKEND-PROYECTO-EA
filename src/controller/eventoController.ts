@@ -1,9 +1,11 @@
 import { Request, Response } from 'express';
 import { EventoService } from '../services/eventoServices';
+import { Evento, EventoPhoto } from '../models/evento';
 import { Usuario } from '../models/usuario';
-import { Evento } from '../models/evento';
 import { logger } from '../config/logger';
 import { Types } from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 
 const eventoService = new EventoService();
 
@@ -1200,3 +1202,201 @@ export async function getRecommendedEventos(
   }
 }
 
+export async function uploadEventoPhoto(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { id: eventId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No se ha subido ninguna foto' });
+    }
+
+    if (!userId) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const user = await Usuario.findById(userId);
+    if (!user) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+    const username = user.username;
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId,
+    );
+    const isCreator = evento.creador.toString() === userId;
+
+    if (!isParticipant && !isCreator) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(403).json({
+        message:
+          'No tienes permiso para subir contenido multimedia a este evento',
+      });
+    }
+
+    const isVideo = req.file.mimetype.startsWith('video/');
+    const type = isVideo ? 'video' : 'image';
+
+    const photoUrl = `/api/event/${eventId}/photo/${req.file.filename}`;
+    const newMedia = new EventoPhoto({
+      eventId: new Types.ObjectId(eventId),
+      userId: new Types.ObjectId(userId),
+      username,
+      url: photoUrl,
+      type,
+    });
+
+    await newMedia.save();
+
+    logger.info(
+      `📷 ${
+        isVideo ? 'Video' : 'Foto'
+      } subida al evento ${eventId} por ${username}`,
+    );
+    return res.status(201).json(newMedia);
+  } catch (error) {
+    logger.error(`Error subiendo contenido al evento: ${error}`);
+    if (req.file) fs.unlinkSync(req.file.path);
+    return res.status(500).json({ message: 'Error subiendo contenido' });
+  }
+}
+
+export async function getEventoPhotos(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { id: eventId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId,
+    );
+    const isCreator = evento.creador.toString() === userId;
+
+    if (!isParticipant && !isCreator && evento.isPrivate) {
+      return res.status(403).json({
+        message: 'No tienes permiso para ver las fotos de este evento privado',
+      });
+    }
+
+    const photos = await EventoPhoto.find({ eventId }).sort({ createdAt: -1 });
+    const mappedPhotos = photos.map((p) => {
+      const obj = p.toObject();
+      if (obj.url.startsWith('/uploads/event-photos/')) {
+        const filename = path.basename(obj.url);
+        obj.url = `/api/event/${eventId}/photo/${filename}`;
+      }
+      return obj;
+    });
+    return res.status(200).json(mappedPhotos);
+  } catch (error) {
+    logger.error(`Error obteniendo fotos del evento: ${error}`);
+    return res.status(500).json({ message: 'Error obteniendo fotos' });
+  }
+}
+
+export async function getSecureEventoPhoto(
+  req: Request,
+  res: Response,
+): Promise<void | Response> {
+  try {
+    const { id: eventId, filename } = req.params;
+    const userId = (req as any).user?.id;
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    // Verificar si el usuario es participante o creador
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId,
+    );
+    const isCreator = evento.creador.toString() === userId;
+
+    if (!isParticipant && !isCreator) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permiso para ver esta foto' });
+    }
+
+    const filePath = path.join(
+      __dirname,
+      '..',
+      'public',
+      'uploads',
+      'event-photos',
+      filename,
+    );
+
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    } else {
+      return res.status(404).json({ message: 'Archivo no encontrado' });
+    }
+  } catch (error) {
+    logger.error(`Error sirviendo foto segura: ${error}`);
+    return res.status(500).json({ message: 'Error al obtener la foto' });
+  }
+}
+
+export async function cleanupOldEventPhotos() {
+  try {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const oldPhotos = await EventoPhoto.find({
+      createdAt: { $lt: oneWeekAgo },
+    });
+
+    logger.info(
+      `Iniciando limpieza de ${oldPhotos.length} archivos multimedia antiguos`,
+    );
+
+    for (const photo of oldPhotos) {
+      const fileName = path.basename(photo.url);
+      const filePath = path.join(
+        __dirname,
+        '..',
+        'public',
+        'uploads',
+        'event-photos',
+        fileName,
+      );
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      await EventoPhoto.deleteOne({ _id: photo._id });
+    }
+
+    if (oldPhotos.length > 0) {
+      logger.info(
+        `✅ Se han eliminado ${oldPhotos.length} archivos multimedia con más de 1 semana`,
+      );
+    }
+  } catch (error) {
+    logger.error(`❌ Error en cleanupOldEventPhotos: ${error}`);
+  }
+}
