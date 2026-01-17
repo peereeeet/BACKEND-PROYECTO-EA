@@ -1244,3 +1244,97 @@ export async function updateInterests(
     return res.status(500).json({ message: 'Error al actualizar intereses' });
   }
 }
+
+export async function deleteEventChatMessage(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { messageId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const result = await userService.deleteEventChatMessage(messageId, userId);
+
+    if (!result.success) {
+      return res.status(result.status || 400).json({ message: result.message });
+    }
+
+    logger.info(
+      `Mensaje de chat eliminado: ${messageId} por usuario ${userId}`,
+    );
+    return res.status(200).json({
+      message: result.message,
+      messageId,
+      deletedImage: result.deletedImage,
+    });
+  } catch (error) {
+    logger.error(`Error al eliminar mensaje de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al eliminar el mensaje' });
+  }
+}
+
+export const uploadChatImage = async (req: Request, res: Response) => {
+  try {
+    const { friendId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ message: 'No se ha proporcionado ninguna imagen' });
+    }
+
+    const imageUrl = `/uploads/friend-chat/${req.file.filename}`;
+
+    logger.info(
+      `Imagen de chat subida: ${imageUrl} de ${userId} a ${friendId}`,
+    );
+    return res.status(200).json({
+      ok: true,
+      imageUrl,
+    });
+  } catch (error) {
+    logger.error(`Error al subir imagen de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al subir la imagen' });
+  }
+};
+
+export const deleteChatMessage = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  try {
+    const { messageId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const result = await userService.deleteChatMessage(messageId, userId);
+
+    if (!result.success) {
+      return res.status(result.status || 400).json({ message: result.message });
+    }
+
+    logger.info(
+      `Mensaje de chat eliminado: ${messageId} por usuario ${userId}`,
+    );
+    return res.status(200).json({
+      message: result.message,
+      messageId,
+      deletedImage: result.deletedImage,
+    });
+  } catch (error) {
+    logger.error(`Error al eliminar mensaje de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al eliminar el mensaje' });
+  }
+};

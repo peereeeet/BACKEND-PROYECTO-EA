@@ -26,9 +26,15 @@ import {
   uploadEventoPhoto,
   getEventoPhotos,
   getSecureEventoPhoto,
+  deleteEventoPhoto,
+  uploadEventChatImage,
 } from '../controller/eventoController';
-import { authenticateToken } from '../auth/middleware';
+import {
+  authenticateToken,
+  optionalAuthenticateToken,
+} from '../auth/middleware';
 import { validateEventContent } from '../profanityMiddleware';
+import { uploadEventChatImage as uploadEventChatImageMulter } from '../config/uploadEventChatConfig';
 import { uploadEventPhoto } from '../config/uploadConfig';
 
 const router = Router();
@@ -800,6 +806,82 @@ router.post(
  */
 router.get('/:id/photos', authenticateToken, getEventoPhotos);
 
-router.get('/:id/photo/:filename', authenticateToken, getSecureEventoPhoto);
+router.get(
+  '/:id/photo/:filename',
+  optionalAuthenticateToken,
+  getSecureEventoPhoto,
+);
 
-export default router;
+/**
+ * @swagger
+ * /api/event/{id}/photos/{photoId}:
+ *   delete:
+ *     summary: Eliminar una foto del evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del evento
+ *       - in: path
+ *         name: photoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID de la foto
+ *     responses:
+ *       200:
+ *         description: Foto eliminada correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: Sin permisos para eliminar
+ *       404:
+ *         description: Foto o evento no encontrado
+ */
+router.delete('/:id/photos/:photoId', authenticateToken, deleteEventoPhoto);
+
+export default router; /**
+ * @swagger
+ * /api/event/{id}/chat-image:
+ *   post:
+ *     summary: Subir una imagen al chat del evento
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del evento
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Imagen subida correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: Solo los participantes pueden enviar imágenes
+ *       404:
+ *         description: Evento no encontrado
+ */
+router.post(
+  '/:id/chat-image',
+  authenticateToken,
+  uploadEventChatImageMulter.single('image'),
+  uploadEventChatImage,
+);

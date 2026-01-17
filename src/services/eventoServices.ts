@@ -558,7 +558,6 @@ export class EventoService {
 
     const creadorUsername = (evento.creador as any)?.username || 'Usuario';
 
-    // Procesar cada invitación
     for (const userId of userIds) {
       if (!Types.ObjectId.isValid(userId)) {
         logger.warn(`ID de usuario inválido: ${userId}`);
@@ -567,7 +566,6 @@ export class EventoService {
 
       const userObjectId = new Types.ObjectId(userId);
 
-      // Verificar si ya está invitado o es participante
       const yaInvitado = evento.invitacionesPendientes.some(
         (id) => String(id) === userId,
       );
@@ -580,7 +578,6 @@ export class EventoService {
         continue;
       }
 
-      // Agregar a invitaciones pendientes
       await Evento.updateOne(
         { _id: eventoId },
         { $addToSet: { invitacionesPendientes: userObjectId } },
@@ -590,7 +587,6 @@ export class EventoService {
         `✅ Usuario ${userId} agregado a invitacionesPendientes del evento ${eventoId}`,
       );
 
-      // Emitir evento WebSocket en tiempo real
       const { io } = await import('../index');
       io.to(`user:${userId}`).emit('eventInvitation:received', {
         fromUserId: creadorId,
@@ -603,7 +599,6 @@ export class EventoService {
         `🔔 Evento eventInvitation:received enviado a user:${userId}`,
       );
 
-      // Crear notificación persistente
       await notificacionService.notifyEventInvitation(
         userId,
         creadorId,
@@ -615,7 +610,6 @@ export class EventoService {
       logger.info(`📧 Notificación persistente creada para usuario ${userId}`);
     }
 
-    // Retornar el evento actualizado
     return await Evento.findById(eventoId)
       .populate('creador', 'username gmail')
       .populate('invitados', 'username gmail')

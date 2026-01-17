@@ -7,6 +7,7 @@ import { Types } from 'mongoose';
 import notificacionService from '../services/notificacionServices';
 import fs from 'fs';
 import path from 'path';
+import { verifyToken } from '../auth/token';
 
 const eventoService = new EventoService();
 
@@ -136,14 +137,12 @@ export async function createEvento(
       `Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, maxParticipantes: ${maxParticipantesNum}`,
     );
 
-    // Enviar notificaciones a los usuarios invitados
     if (isPrivate && invitacionesPendientesIds.length > 0) {
       const creadorUser = await Usuario.findById(creadorId).select('username');
       const creadorUsername = creadorUser?.username || 'Usuario';
 
       for (const userId of invitacionesPendientesIds) {
         try {
-          // Emitir evento WebSocket
           const { io } = await import('../index');
           io.to(`user:${userId}`).emit('eventInvitation:received', {
             fromUserId: creadorId,
@@ -156,7 +155,6 @@ export async function createEvento(
             `🔔 Evento eventInvitation:received enviado a user:${userId}`,
           );
 
-          // Crear notificación persistente
           await notificacionService.notifyEventInvitation(
             userId,
             creadorId,
@@ -812,6 +810,24 @@ export async function inviteUsersToPrivateEvent(
         .json({ message: 'Debe proporcionar una lista de IDs de usuarios' });
     }
 
+    const evento = await Evento.findById(eventoId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    if (!evento.isPrivate) {
+      return res.status(400).json({ message: 'El evento no es privado' });
+    }
+
+    const creadorIdInvite = (evento.creador as any)?._id
+      ? String((evento.creador as any)._id)
+      : String(evento.creador);
+    if (creadorIdInvite !== userId.toString()) {
+      return res
+        .status(403)
+        .json({ message: 'Solo el creador puede invitar usuarios' });
+    }
+
     const eventoActualizado = await eventoService.inviteUsersToEvent(
       eventoId,
       userIds,
@@ -1343,7 +1359,18 @@ export async function getSecureEventoPhoto(
 ): Promise<void | Response> {
   try {
     const { id: eventId, filename } = req.params;
-    const userId = (req as any).user?.id;
+    let userId = (req as any).user?.id;
+
+    if (!userId && req.query.token) {
+      const decoded = verifyToken(req.query.token as string);
+      if (decoded && (decoded as any).payload?.id) {
+        userId = (decoded as any).payload.id;
+      }
+    }
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
 
     const evento = await Evento.findById(eventId);
     if (!evento) {
@@ -1378,6 +1405,64 @@ export async function getSecureEventoPhoto(
   } catch (error) {
     logger.error(`Error sirviendo foto segura: ${error}`);
     return res.status(500).json({ message: 'Error al obtener la foto' });
+  }
+}
+
+export async function deleteEventoPhoto(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { id: eventId, photoId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Usuario no autenticado' });
+    }
+
+    const photo = await EventoPhoto.findById(photoId);
+    if (!photo) {
+      return res.status(404).json({ message: 'Foto no encontrada' });
+    }
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isPhotoOwner = photo.userId.toString() === userId;
+    const isEventCreator = evento.creador.toString() === userId;
+
+    if (!isPhotoOwner && !isEventCreator) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para eliminar esta foto' });
+    }
+
+    const fileName = path.basename(photo.url);
+    const filePath = path.join(
+      __dirname,
+      '..',
+      'public',
+      'uploads',
+      'event-photos',
+      fileName,
+    );
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      logger.info(`🗑️ Archivo físico eliminado: ${fileName}`);
+    }
+
+    await EventoPhoto.deleteOne({ _id: photoId });
+
+    logger.info(
+      `✅ Foto ${photoId} eliminada del evento ${eventId} por usuario ${userId}`,
+    );
+    return res.status(200).json({ message: 'Foto eliminada correctamente' });
+  } catch (error) {
+    logger.error(`Error al eliminar foto: ${error}`);
+    return res.status(500).json({ message: 'Error al eliminar la foto' });
   }
 }
 
@@ -1418,5 +1503,60 @@ export async function cleanupOldEventPhotos() {
     }
   } catch (error) {
     logger.error(`❌ Error en cleanupOldEventPhotos: ${error}`);
+  }
+}
+export async function uploadEventChatImage(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const eventoId = req.params.id;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      logger.warn('Usuario no autenticado al subir imagen de chat');
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!req.file) {
+      logger.warn('No se envió ningún archivo');
+      return res.status(400).json({ message: 'No se envió ningún archivo' });
+    }
+
+    const evento = await Evento.findById(eventoId);
+    if (!evento) {
+      logger.warn(`Evento ${eventoId} no encontrado`);
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId.toString(),
+    );
+
+    if (!isParticipant && evento.creador.toString() !== userId.toString()) {
+      logger.warn(
+        `Usuario ${userId} no es participante del evento ${eventoId}`,
+      );
+      return res.status(403).json({
+        message: 'Solo los participantes pueden enviar imágenes al chat',
+      });
+    }
+
+    const imageUrl = `/uploads/event-chat/${req.file.filename}`;
+
+    logger.info(
+      `✅ Imagen subida al chat del evento ${eventoId} por usuario ${userId}: ${imageUrl}`,
+    );
+
+    return res.status(200).json({
+      message: 'Imagen subida correctamente',
+      imageUrl,
+    });
+  } catch (error) {
+    logger.error(`Error al subir imagen de chat: ${error}`);
+    return res.status(500).json({
+      message: 'Error al subir la imagen',
+      error: String(error),
+    });
   }
 }

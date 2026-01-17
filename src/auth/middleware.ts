@@ -135,7 +135,6 @@ export function authenticateRefreshToken(
       .json({ error: 'Error interno en la verificación del refresh token' });
   }
 }
-
 export function optionalAuthenticateToken(
   req: Request,
   res: Response,

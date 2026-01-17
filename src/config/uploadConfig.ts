@@ -74,6 +74,56 @@ const fileFilter = (
   }
 };
 
+const friendChatUploadDir = path.join(
+  __dirname,
+  '..',
+  'public',
+  'uploads',
+  'friend-chat',
+);
+if (!fs.existsSync(friendChatUploadDir)) {
+  fs.mkdirSync(friendChatUploadDir, { recursive: true });
+}
+
+const friendChatStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, friendChatUploadDir);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `chat-${uniqueSuffix}${ext}`);
+  },
+});
+
+const imageFileFilter = (
+  _req: any,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+) => {
+  const allowedMimes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+  ];
+
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Solo se permiten imágenes (JPG, PNG, GIF, WEBP)'));
+  }
+};
+
+export const uploadFriendChatImage = multer({
+  storage: friendChatStorage,
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
+
 export const uploadProfilePhoto = multer({
   storage: profileStorage,
   fileFilter,

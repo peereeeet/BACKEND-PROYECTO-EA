@@ -102,13 +102,15 @@ export interface IChatMessage extends Document {
   from: string;
   to: string;
   text: string;
+  imageUrl?: string;
   createdAt: Date;
 }
 
 const chatMessageSchema = new Schema<IChatMessage>({
   from: { type: String, required: true },
   to: { type: String, required: true },
-  text: { type: String, required: true },
+  text: { type: String, required: false },
+  imageUrl: { type: String, required: false },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -117,6 +119,7 @@ export interface IEventChatMessage extends Document {
   userId: string;
   username: string;
   text: string;
+  imageUrl?: string;
   createdAt: Date;
 }
 
@@ -124,7 +127,8 @@ const eventChatMessageSchema = new Schema<IEventChatMessage>({
   eventId: { type: String, required: true, index: true },
   userId: { type: String, required: true },
   username: { type: String, required: true },
-  text: { type: String, required: true },
+  text: { type: String, required: false },
+  imageUrl: { type: String, required: false },
   createdAt: { type: Date, default: Date.now },
 });
 

@@ -38,6 +38,9 @@ import {
   checkGoogleUser,
   getBlockedUsers,
   updateInterests,
+  deleteEventChatMessage,
+  uploadChatImage,
+  deleteChatMessage,
 } from '../controller/usuarioController';
 import {
   validateUserContent,
@@ -51,6 +54,7 @@ import {
 } from '../auth/middleware';
 import { registerValidation } from '../userValidators';
 import { uploadProfilePhoto as uploadPhotoMiddleware } from '../config/uploadConfig';
+import { uploadFriendChatImage } from '../config/uploadConfig';
 
 const router = Router();
 
@@ -1076,5 +1080,107 @@ router.post(
   validateMessageContent,
   postEventChatMessage,
 );
+
+/**
+ * @swagger
+ * /api/user/events/chat/{messageId}:
+ *   delete:
+ *     summary: Eliminar un mensaje del chat de evento
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del mensaje a eliminar
+ *     responses:
+ *       200:
+ *         description: Mensaje eliminado correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: No tienes permiso para eliminar este mensaje
+ *       404:
+ *         description: Mensaje no encontrado
+ */
+router.delete(
+  '/events/chat/:messageId',
+  authenticateToken,
+  deleteEventChatMessage,
+);
+
+/**
+ * @swagger
+ * /api/user/{userId}/chat/{friendId}/image:
+ *   post:
+ *     summary: Subir una imagen al chat con un amigo
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: friendId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Imagen subida correctamente
+ *       401:
+ *         description: No autenticado
+ *       400:
+ *         description: Error en la solicitud
+ */
+router.post(
+  '/:userId/chat/:friendId/image',
+  authenticateToken,
+  uploadFriendChatImage.single('image'),
+  uploadChatImage,
+);
+
+/**
+ * @swagger
+ * /api/user/chat/{messageId}:
+ *   delete:
+ *     summary: Eliminar un mensaje del chat con amigo
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del mensaje a eliminar
+ *     responses:
+ *       200:
+ *         description: Mensaje eliminado correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: No tienes permiso para eliminar este mensaje
+ *       404:
+ *         description: Mensaje no encontrado
+ */
+router.delete('/chat/:messageId', authenticateToken, deleteChatMessage);
 
 export default router;
