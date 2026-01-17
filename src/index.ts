@@ -68,7 +68,10 @@ app.use('/uploads', (req, res, next) => {
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+import authRoutes from './routes/authRoutes';
+
 // Rutas de API
+app.use('/api/auth', authRoutes);
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
 app.use('/api/ratings', valoracionRoutes);
@@ -136,7 +139,10 @@ async function cleanupOldNotificaciones() {
 
 ////////////////////// CONEXIÓN A BBDD //////////////////////
 mongoose
-  .connect('mongodb://localhost:27017/BBDD')
+  .connect('mongodb://127.0.0.1:27017/BBDD', {
+    serverSelectionTimeoutMS: 5000,
+    family: 4,
+  } as mongoose.ConnectOptions)
   .then(async () => {
     logger.info('CONEXION EXITOSA A LA BASE DE DATOS DE MONGODB');
 
@@ -274,7 +280,7 @@ io.on('connection', (socket) => {
             imageUrl,
           );
           const msg = {
-            _id: String((savedMessage as any)._id),
+            _id: String((savedMessage as { _id: mongoose.Types.ObjectId })._id),
             from: savedMessage.from,
             to: savedMessage.to,
             text: savedMessage.text,
@@ -399,7 +405,7 @@ io.on('connection', (socket) => {
           );
 
           const msg = {
-            _id: String((savedMessage as any)._id),
+            _id: String((savedMessage as { _id: mongoose.Types.ObjectId })._id),
             eventId: savedMessage.eventId,
             userId: savedMessage.userId,
             username: savedMessage.username,
