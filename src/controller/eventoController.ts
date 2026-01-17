@@ -1199,3 +1199,4 @@ export async function getRecommendedEventos(
       .json({ message: 'Error obteniendo recomendaciones' });
   }
 }
+

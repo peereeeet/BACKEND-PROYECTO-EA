@@ -712,4 +712,111 @@ export class EventoService {
       .populate('participantes', 'username gmail')
       .sort({ schedule: 1 });
   }
+
+  async getUpcomingEventos(
+    page: number = 1,
+    limit: number = 10
+  ): Promise<{
+    data: IEvento[];
+    page: number;
+    totalPages: number;
+    totalItems: number;
+  }> {
+    try {
+      const skip = (page - 1) * limit;
+      const now = new Date();
+
+      const query = {
+        schedule: { $gte: now },
+        isPrivate: false
+      };
+
+      const [total, eventos] = await Promise.all([
+        Evento.countDocuments(query),
+        Evento.find(query)
+          .populate('creador', '_id username gmail')
+          .populate('participantes', '_id username gmail')
+          .populate('invitados', '_id username gmail')
+          .populate('listaEspera', '_id username gmail')
+          .sort({ schedule: 1 })
+          .skip(skip)
+          .limit(limit)
+          .lean()
+      ]);
+
+      logger.info(
+        `📅 Eventos próximos obtenidos: ${eventos.length} eventos (página ${page}/${Math.ceil(total / limit)})`
+      );
+
+      return {
+        data: eventos as IEvento[],
+        page,
+        totalPages: Math.ceil(total / limit),
+        totalItems: total
+      };
+    } catch (error) {
+      logger.error(`Error al obtener eventos próximos: ${error}`);
+      throw new Error('No se pudieron obtener eventos próximos');
+    }
+  }
+
+  async getRecommendedEventos(
+    userId: string,
+    page: number = 1,
+    limit: number = 10
+  ): Promise<{
+    data: IEvento[];
+    page: number;
+    totalPages: number;
+    totalItems: number;
+  }> {
+    try {
+      const user = await Usuario.findById(userId).select('interests');
+      
+      if (!user || !user.interests || user.interests.length === 0) {
+        return this.getUpcomingEventos(page, limit);
+      }
+
+      const userInterests = user.interests;
+      const skip = (page - 1) * limit;
+
+      const now = new Date();
+      
+      const query: any = {
+        schedule: { $gte: now },
+        categoria: { $in: userInterests },
+        $or: [
+          { isPrivate: false },
+          { isPrivate: true, invitados: new Types.ObjectId(userId) }
+        ]
+      };
+
+      const [total, eventos] = await Promise.all([
+        Evento.countDocuments(query),
+        Evento.find(query)
+          .populate('creador', '_id username gmail')
+          .populate('participantes', '_id username gmail')
+          .populate('invitados', '_id username gmail')
+          .populate('listaEspera', '_id username gmail')
+          .sort({ schedule: 1 })
+          .skip(skip)
+          .limit(limit)
+          .lean()
+      ]);
+
+      logger.info(
+        `✨ Eventos recomendados obtenidos para usuario ${userId}: ${eventos.length} eventos basados en ${userInterests.length} intereses`
+      );
+
+      return {
+        data: eventos as IEvento[],
+        page,
+        totalPages: Math.ceil(total / limit),
+        totalItems: total
+      };
+    } catch (error) {
+      logger.error(`Error al obtener eventos recomendados: ${error}`);
+      throw new Error('No se pudieron obtener eventos recomendados');
+    }
+  }
 }
