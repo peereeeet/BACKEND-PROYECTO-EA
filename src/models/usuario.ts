@@ -20,6 +20,12 @@ export interface IUsuario {
   comparePassword(candidatePassword: string): Promise<boolean>;
   isModified(path: string): boolean;
   isActive: boolean;
+  accountStatus: 'PENDING_EMAIL' | 'ACTIVE' | 'DISABLED';
+  otpHash?: string | null;
+  otpExpires?: Date | null;
+  otpAttempts?: number;
+  otpLastSentAt?: Date | null;
+  otpPurpose?: 'VERIFY_EMAIL' | 'RESET_PASSWORD' | null;
   isGoogleUser?: boolean;
   googleId?: string | null;
   blockedUsers: Types.ObjectId[];
@@ -44,6 +50,20 @@ const usuarioSchema = new Schema<IUsuario>(
       },
     },
     isActive: { type: Boolean, default: true },
+    accountStatus: {
+      type: String,
+      enum: ['PENDING_EMAIL', 'ACTIVE', 'DISABLED'],
+      default: 'PENDING_EMAIL',
+    },
+    otpHash: { type: String, default: null },
+    otpExpires: { type: Date, default: null },
+    otpAttempts: { type: Number, default: 0 },
+    otpLastSentAt: { type: Date, default: null },
+    otpPurpose: {
+      type: String,
+      enum: ['VERIFY_EMAIL', 'RESET_PASSWORD', null],
+      default: null,
+    },
     isGoogleUser: { type: Boolean, default: false },
     googleId: { type: String, default: null },
     profilePhoto: { type: String, default: null },
@@ -82,14 +102,14 @@ usuarioSchema.pre<IUsuario>('save', async function (next) {
     this.password = await bcrypt.hash(this.password, salt);
     return next();
   } catch (err) {
-    return next(err as any);
+    return next(err as unknown as Error);
   }
 });
 
 usuarioSchema.methods.comparePassword = async function (
   candidatePassword: string,
 ): Promise<boolean> {
-  const password = (this as any).password;
+  const password = this.password;
   if (!password) {
     return false;
   }

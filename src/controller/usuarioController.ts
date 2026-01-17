@@ -106,10 +106,10 @@ export async function checkUserExistsForReset(req: Request, res: Response) {
       username: user.username,
       gmail: user.gmail,
     });
-  } catch (err: any) {
-    return res
-      .status(500)
-      .json({ message: err?.message || 'Error al comprobar usuario.' });
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error ? err.message : 'Error al comprobar usuario.';
+    return res.status(500).json({ message: errorMessage });
   }
 }
 
@@ -121,9 +121,13 @@ export async function directResetPassword(req: Request, res: Response) {
     }
     await userService.setPasswordByUserId(userId, newPassword);
     return res.json({ ok: true });
-  } catch (err: any) {
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error
+        ? err.message
+        : 'No se pudo actualizar la contraseña.';
     return res.status(400).json({
-      message: err?.message || 'No se pudo actualizar la contraseña.',
+      message: errorMessage,
     });
   }
 }
@@ -519,7 +523,11 @@ export async function loginUser(
       });
     }
 
-    if (!user.isActive) {
+    if (user.accountStatus === 'PENDING_EMAIL') {
+      return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED' });
+    }
+
+    if (!user.isActive || user.accountStatus === 'DISABLED') {
       return res.status(403).json({ message: 'USER_DISABLED' });
     }
 
@@ -744,7 +752,8 @@ export async function refreshToken(
   res: Response,
 ): Promise<Response> {
   try {
-    const id = (req as any).user.payload.id;
+    const id = (req as Request & { user: { payload: { id: string } } }).user
+      .payload.id;
     const user = await userService.getUserById(id);
     if (!user) {
       logger.warn(`Usuario no encontrado en refreshToken con ID: ${id}`);

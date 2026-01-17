@@ -7,18 +7,11 @@ import {
   updateUserById,
   deleteUserById,
   deleteWithPassword,
-  checkUserExistsForReset,
-  directResetPassword,
   addEventToUser,
   updateOwnProfile,
   uploadProfilePhoto,
   deleteProfilePhoto,
-  loginUser,
-  createAdminUser,
-  checkEmailExists,
-  checkUsernameExists,
   disableUser,
-  refreshToken,
   updateUserRole,
   sendFriendRequest,
   getSentRequests,
@@ -32,7 +25,6 @@ import {
   getEventChatForEvent,
   postEventChatMessage,
   postHeartbeat,
-  loginWithGoogle,
   blockUser,
   unblockUser,
   getBlockedUsers,
@@ -45,7 +37,6 @@ import {
   authenticateToken,
   authenticateadminToken,
   authenticateOwner,
-  authenticateRefreshToken,
 } from '../auth/middleware';
 import { registerValidation } from '../userValidators';
 import { uploadProfilePhoto as uploadPhotoMiddleware } from '../config/uploadConfig';
@@ -357,61 +348,6 @@ router.patch(
 
 /**
  * @swagger
- * /api/user/forgot-password/check:
- *   post:
- *     summary: Comprobar si existe un usuario para restablecer contraseña
- *     tags: [Autenticación]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               gmail:
- *                 type: string
- *                 description: Correo del usuario que quiere restablecer la contraseña
- *     responses:
- *       200:
- *         description: Usuario encontrado o mensaje indicando que no existe
- *       400:
- *         description: Petición incorrecta
- *       500:
- *         description: Error del servidor
- */
-router.post('/forgot-password/check', checkUserExistsForReset);
-
-/**
- * @swagger
- * /api/user/reset-password/direct:
- *   post:
- *     summary: Restablecer contraseña directamente
- *     tags: [Autenticación]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               gmail:
- *                 type: string
- *               newPassword:
- *                 type: string
- *     responses:
- *       200:
- *         description: Contraseña restablecida correctamente
- *       400:
- *         description: Datos inválidos
- *       404:
- *         description: Usuario no encontrado
- *       500:
- *         description: Error del servidor
- */
-router.post('/reset-password/direct', directResetPassword);
-
-/**
- * @swagger
  * /api/user/{id}/addEvent:
  *   put:
  *     summary: Añadir evento a un usuario
@@ -439,57 +375,6 @@ router.post('/reset-password/direct', directResetPassword);
  *         description: Usuario no encontrado
  */
 router.put('/:id/addEvent', authenticateadminToken, addEventToUser);
-
-/**
- * @swagger
- * /api/user/auth/login:
- *   post:
- *     summary: Iniciar sesión de usuario
- *     tags: [Autenticación]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *               - password
- *             properties:
- *               username:
- *                 type: string
- *               password:
- *                 type: string
- *     responses:
- *       200:
- *         description: Login exitoso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                 user:
- *                   $ref: '#/components/schemas/Usuario'
- *       401:
- *         description: Credenciales incorrectas
- */
-router.post('/auth/login', loginUser);
-
-router.post('/auth/google', loginWithGoogle);
-
-/**
- * @swagger
- * /api/user/auth/create-admin:
- *   post:
- *     summary: Crear usuario admin (solo desarrollo)
- *     tags: [Autenticación]
- *     responses:
- *       200:
- *         description: Usuario admin creado/verificado
- */
-router.post('/auth/create-admin', createAdminUser);
 
 /**
  * @swagger
@@ -536,58 +421,6 @@ router.patch('/:id/disable', authenticateadminToken, disableUser);
  *         description: Error del servidor
  */
 router.get('/:id/events', getUserEvents);
-
-/**
- * @swagger
- * /api/user/check-email:
- *   post:
- *     summary: Comprobar si un email ya está registrado
- *     tags: [Autenticación]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               gmail:
- *                 type: string
- *     responses:
- *       200:
- *         description: Resultado de la validación
- *       400:
- *         description: Petición incorrecta
- *       500:
- *         description: Error del servidor
- */
-router.post('/check-email', checkEmailExists);
-
-/**
- * @swagger
- * /api/user/check-username:
- *   post:
- *     summary: Comprobar si un nombre de usuario ya está registrado
- *     tags: [Autenticación]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               username:
- *                 type: string
- *     responses:
- *       200:
- *         description: Resultado de la validación
- *       400:
- *         description: Petición incorrecta
- *       500:
- *         description: Error del servidor
- */
-router.post('/check-username', checkUsernameExists);
-
-router.post('/refresh', authenticateRefreshToken, refreshToken);
 
 /**
  * @swagger
