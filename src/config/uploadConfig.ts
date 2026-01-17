@@ -86,6 +86,6 @@ export const uploadEventPhoto = multer({
   storage: eventStorage,
   fileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB para media de eventos (fotos y videos)
+    fileSize: 50 * 1024 * 1024,
   },
 });

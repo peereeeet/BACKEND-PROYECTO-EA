@@ -100,7 +100,7 @@ export async function checkUserExistsForReset(req: Request, res: Response) {
       return res.status(400).json({ message: 'Falta email o usuario.' });
     }
 
-    const user = await userService.findUserByEmailOrUsername(emailOrUsername); // { _id, username, gmail } | null
+    const user = await userService.findUserByEmailOrUsername(emailOrUsername);
     if (!user) return res.json({ exists: false });
 
     return res.json({
@@ -565,15 +565,13 @@ export async function checkGoogleUser(req: Request, res: Response) {
     const user = await Usuario.findOne({ gmail });
 
     if (user) {
-      // Usuario existe
       return res.status(200).json({
         exists: true,
-        needsData: !user.birthday, // Si falta cumpleaños, necesita datos
+        needsData: !user.birthday,
         hasUsername: !!user.username,
         hasBirthday: !!user.birthday,
       });
     } else {
-      // Usuario nuevo
       const suggestedName =
         payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
       return res.status(200).json({
@@ -697,7 +695,6 @@ export async function loginWithGoogle(req: Request, res: Response) {
   }
 }
 
-/* Create admin only development */
 export async function createAdminUser(
   req: Request,
   res: Response,

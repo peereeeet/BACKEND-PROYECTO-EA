@@ -90,7 +90,6 @@ export async function createEvento(
       invitacionesPendientesIds = invitados.map((id: string) => id.toString());
     }
 
-    // Procesar maxParticipantes
     let maxParticipantesNum: number | null = null;
     if (
       maxParticipantes !== undefined &&
@@ -1329,7 +1328,6 @@ export async function getSecureEventoPhoto(
       return res.status(404).json({ message: 'Evento no encontrado' });
     }
 
-    // Verificar si el usuario es participante o creador
     const isParticipant = evento.participantes.some(
       (p) => p.toString() === userId,
     );
