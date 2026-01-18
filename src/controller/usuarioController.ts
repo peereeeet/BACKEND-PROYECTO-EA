@@ -214,10 +214,11 @@ export const getVisibleUsers = async (
       1,
       Math.min(50, parseInt(req.query.limit as string) || 10),
     );
+    const q = (req.query.q as string) || '';
 
-    const result = await userService.getVisibleUsers(authId, page, limit);
+    const result = await userService.getVisibleUsers(authId, page, limit, q);
     logger.info(
-      `Usuarios visibles obtenidos para usuario ${authId}: ${result.totalItems} usuarios encontrados en total, pagina ${page}`,
+      `Usuarios visibles obtenidos para usuario ${authId}: ${result.totalItems} usuarios encontrados en total, pagina ${page}${q ? ', busqueda: ' + q : ''}`,
     );
     res.status(200).json(result);
   } catch (error) {

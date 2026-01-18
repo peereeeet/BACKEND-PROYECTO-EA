@@ -55,6 +55,7 @@ export class UserService {
     currentUserId: string,
     page: number = 1,
     limit: number = 10,
+    q: string = '',
   ): Promise<{
     data: IUsuario[];
     totalItems: number;
@@ -65,10 +66,30 @@ export class UserService {
       throw new Error('Invalid user id');
     }
 
-    const filter = {
-      _id: { $ne: new Types.ObjectId(currentUserId) },
+    const user = await Usuario.findById(currentUserId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Excluir a uno mismo, amigos actuales y solicitudes pendientes (enviadas o recibidas)
+    const excludedIds = [
+      new Types.ObjectId(currentUserId),
+      ...(user.friends || []),
+      ...(user.friendRequest || []),
+      ...(user.sentRequests || []),
+    ];
+
+    const filter: any = {
+      _id: { $nin: excludedIds },
       rol: { $ne: 'admin' },
     };
+
+    if (q) {
+      filter.$or = [
+        { username: { $regex: q, $options: 'i' } },
+        { gmail: { $regex: q, $options: 'i' } },
+      ];
+    }
 
     const totalItems = await Usuario.countDocuments(filter);
     const totalPages = Math.ceil(totalItems / limit);
