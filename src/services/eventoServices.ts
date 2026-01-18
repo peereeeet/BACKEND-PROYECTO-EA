@@ -548,6 +548,25 @@ export class EventoService {
       throw new Error('Solo se pueden enviar invitaciones a eventos privados');
     }
 
+    if (evento.maxParticipantes) {
+      const totalActual = evento.participantes.length;
+      const totalInvitacionesPendientes = evento.invitacionesPendientes.length;
+      const nuevosInvitados = userIds.length;
+      const totalPotencial =
+        totalActual + totalInvitacionesPendientes + nuevosInvitados;
+
+      if (totalPotencial > evento.maxParticipantes) {
+        logger.warn(
+          `Intento de invitar ${nuevosInvitados} usuarios al evento ${eventoId} excedería límite (${totalPotencial} > ${evento.maxParticipantes})`,
+        );
+        throw new Error(
+          `No se pueden invitar a ${nuevosInvitados} usuarios. ` +
+            `El evento tiene un límite de ${evento.maxParticipantes} participantes. ` +
+            `Actualmente hay ${totalActual} participantes y ${totalInvitacionesPendientes} invitaciones pendientes.`,
+        );
+      }
+    }
+
     const creadorIdStr = (evento.creador as any)?._id
       ? String((evento.creador as any)._id)
       : String(evento.creador);
@@ -627,14 +646,52 @@ export class EventoService {
     const userObjectId = new Types.ObjectId(userId);
 
     const evento = await Evento.findById(eventoId);
+
     if (!evento) {
       throw new Error('Evento no encontrado');
     }
 
-    if (
-      evento.maxParticipantes &&
-      evento.participantes.length >= evento.maxParticipantes
-    ) {
+    const tieneInvitacion = evento.invitacionesPendientes.some(
+      (id) => id.toString() === userId,
+    );
+
+    if (!tieneInvitacion) {
+      throw new Error('No tienes una invitación pendiente para este evento');
+    }
+
+    const yaParticipa = evento.participantes.some(
+      (p) => p.toString() === userId,
+    );
+
+    if (yaParticipa) {
+      const eventoActualizado = await Evento.findByIdAndUpdate(
+        eventoId,
+        {
+          $pull: { invitacionesPendientes: userObjectId },
+        },
+        { new: true },
+      )
+        .populate('creador', 'username gmail')
+        .populate('invitados', 'username gmail')
+        .populate('participantes', 'username gmail')
+        .populate('listaEspera', 'username gmail');
+
+      logger.info(
+        `Usuario ${userId} ya estaba en participantes del evento ${eventoId}`,
+      );
+
+      return {
+        evento: eventoActualizado,
+        enListaEspera: false,
+        mensaje: 'Ya estás inscrito en este evento',
+      };
+    }
+
+    const hayEspacio =
+      !evento.maxParticipantes ||
+      evento.participantes.length < evento.maxParticipantes;
+
+    if (!hayEspacio) {
       const eventoActualizado = await Evento.findByIdAndUpdate(
         eventoId,
         {
@@ -651,10 +708,14 @@ export class EventoService {
         .populate('participantes', 'username gmail')
         .populate('listaEspera', 'username gmail');
 
+      logger.info(
+        `⏳ Usuario ${userId} aceptó invitación pero el evento ${eventoId} está lleno (${evento.participantes.length}/${evento.maxParticipantes}). Añadido a lista de espera.`,
+      );
+
       return {
         evento: eventoActualizado,
         enListaEspera: true,
-        mensaje: `Evento completo. Has sido añadido a la lista de espera.`,
+        mensaje: `Evento completo (${evento.participantes.length}/${evento.maxParticipantes}). Has sido añadido a la lista de espera.`,
       };
     }
 
@@ -674,10 +735,24 @@ export class EventoService {
       .populate('participantes', 'username gmail')
       .populate('listaEspera', 'username gmail');
 
+    await Usuario.findByIdAndUpdate(userId, {
+      $addToSet: { eventos: eventoId },
+    });
+
+    try {
+      await gamificacionService.otorgarPuntos(userId, 'unirseEvento');
+    } catch (err) {
+      logger.error(`Error al otorgar puntos por unirse a evento: ${err}`);
+    }
+
+    logger.info(
+      `✅ Usuario ${userId} aceptó invitación y se unió al evento ${eventoId} correctamente`,
+    );
+
     return {
       evento: eventoActualizado,
       enListaEspera: false,
-      mensaje: 'Invitación aceptada correctamente',
+      mensaje: 'Invitación aceptada. Te has unido al evento correctamente.',
     };
   }
 

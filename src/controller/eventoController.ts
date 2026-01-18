@@ -54,6 +54,15 @@ export async function createEvento(
       return res.status(401).json({ message: 'No autenticado' });
     }
 
+    if (isPrivate && (!Array.isArray(invitados) || invitados.length === 0)) {
+      logger.warn(
+        `Usuario ${creadorId} intentó crear evento privado sin invitados`,
+      );
+      return res.status(400).json({
+        message: 'Un evento privado debe tener al menos un invitado',
+      });
+    }
+
     const scheduleStr = normalizeSchedule(schedule);
     const participantesIdsRaw = normalizeParticipantes(req.body);
 
@@ -104,6 +113,18 @@ export async function createEvento(
       }
     }
 
+    if (isPrivate && maxParticipantesNum !== null) {
+      const totalInvitadosConCreador = invitacionesPendientesIds.length + 1;
+      if (maxParticipantesNum < totalInvitadosConCreador) {
+        logger.warn(
+          `Usuario ${creadorId} intentó crear evento con límite ${maxParticipantesNum} pero tiene ${totalInvitadosConCreador} invitados (incluyendo creador)`,
+        );
+        return res.status(400).json({
+          message: `El límite de participantes (${maxParticipantesNum}) debe ser mayor o igual al número de invitados más el creador (${totalInvitadosConCreador})`,
+        });
+      }
+    }
+
     const created = await eventoService.createEvento({
       name,
       schedule: new Date(scheduleStr) as any,
@@ -134,7 +155,7 @@ export async function createEvento(
       .exec();
 
     logger.info(
-      `Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, maxParticipantes: ${maxParticipantesNum}`,
+      `✅ Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, maxParticipantes: ${maxParticipantesNum}, invitados: ${invitacionesPendientesIds.length}`,
     );
 
     if (isPrivate && invitacionesPendientesIds.length > 0) {
