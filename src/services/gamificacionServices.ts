@@ -312,24 +312,6 @@ export class GamificacionService {
     return true;
   }
 
-  async obtenerRanking(limite: number = 10): Promise<any[]> {
-    const ranking = await UsuarioProgreso.find()
-      .sort({ puntos: -1 })
-      .limit(limite)
-      .populate('usuario', 'username gmail')
-      .populate('insignias')
-      .exec();
-
-    return ranking.map((r, index) => ({
-      posicion: index + 1,
-      usuario: (r.usuario as any).username,
-      gmail: (r.usuario as any).gmail,
-      puntos: r.puntos,
-      nivel: r.nivel,
-      insignias: r.insignias.length,
-    }));
-  }
-
   async obtenerTodasInsignias(): Promise<IInsignia[]> {
     return await Insignia.find().exec();
   }

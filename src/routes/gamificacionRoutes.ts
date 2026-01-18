@@ -2,9 +2,8 @@ import { Router } from 'express';
 import {
   obtenerMiProgreso,
   obtenerProgresoUsuario,
-  obtenerRanking,
   obtenerInsignias,
-  inicializarInsignias
+  inicializarInsignias,
 } from '../controller/gamificacionController';
 import { authenticateToken } from '../auth/middleware';
 
@@ -66,46 +65,6 @@ router.get('/mi-progreso', authenticateToken, obtenerMiProgreso);
  *         description: Error del servidor
  */
 router.get('/progreso/:usuarioId', obtenerProgresoUsuario);
-
-/**
- * @swagger
- * /api/gamificacion/ranking:
- *   get:
- *     summary: Obtener el ranking de usuarios (leaderboard)
- *     tags: [Gamificación]
- *     parameters:
- *       - in: query
- *         name: limite
- *         schema:
- *           type: integer
- *           default: 10
- *         description: Número de usuarios en el ranking
- *     responses:
- *       200:
- *         description: Ranking de usuarios
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   posicion:
- *                     type: number
- *                   usuario:
- *                     type: string
- *                   gmail:
- *                     type: string
- *                   puntos:
- *                     type: number
- *                   nivel:
- *                     type: string
- *                   insignias:
- *                     type: number
- *       500:
- *         description: Error del servidor
- */
-router.get('/ranking', obtenerRanking);
 
 /**
  * @swagger
