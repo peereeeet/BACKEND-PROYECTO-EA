@@ -396,11 +396,19 @@ export class UserService {
       ),
     ]);
 
+    let rewardDataUser = null;
+    let rewardDataRequester = null;
+
     try {
-      await Promise.all([
-        gamificacionService.otorgarPuntos(userId, 'hacerAmigo'),
-        gamificacionService.otorgarPuntos(requesterId, 'hacerAmigo'),
+      const results = await Promise.all([
+        gamificacionService.otorgarPuntosConRecompensa(userId, 'hacerAmigo'),
+        gamificacionService.otorgarPuntosConRecompensa(
+          requesterId,
+          'hacerAmigo',
+        ),
       ]);
+      rewardDataUser = results[0];
+      rewardDataRequester = results[1];
     } catch (err) {
       logger.error(`Error al otorgar puntos por amistad: ${err}`);
     }
@@ -412,7 +420,11 @@ export class UserService {
       userInfo?.username || 'Usuario',
     );
 
-    return { message: 'Solicitud aceptada correctamente' };
+    return {
+      message: 'Solicitud aceptada correctamente',
+      rewardDataUser,
+      rewardDataRequester,
+    };
   }
 
   async rejectFriendRequest(userId: string, requesterId: string) {

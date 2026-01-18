@@ -3,6 +3,15 @@ import { UsuarioProgreso, IUsuarioProgreso } from '../models/usuarioProgreso';
 import { Insignia, IInsignia } from '../models/insignia';
 import { logger } from '../config/logger';
 
+export interface RewardData {
+  puntosGanados: number;
+  accion: 'crearEvento' | 'unirseEvento' | 'hacerAmigo' | 'dejarValoracion';
+  insigniasDesbloqueadas: IInsignia[];
+  nivelAnterior: string;
+  nivelNuevo: string;
+  subisteDeNivel: boolean;
+}
+
 export class GamificacionService {
   private nivelesConfig = [
     { nombre: 'Novato', puntosMin: 0, puntosMax: 99 },
@@ -42,6 +51,60 @@ export class GamificacionService {
     }
 
     return progreso;
+  }
+
+  async otorgarPuntosConRecompensa(
+    usuarioId: string,
+    accion:
+      | 'crearEvento'
+      | 'unirseEvento'
+      | 'asistirEvento'
+      | 'dejarValoracion'
+      | 'hacerAmigo',
+  ): Promise<RewardData> {
+    const puntos = this.puntosAcciones[accion] || 0;
+    const progreso = await this.obtenerProgreso(usuarioId);
+
+    const nivelAnterior = progreso.nivel;
+    progreso.puntos += puntos;
+
+    switch (accion) {
+      case 'crearEvento':
+        progreso.estadisticas.eventosCreadosTotal += 1;
+        break;
+      case 'unirseEvento':
+        progreso.estadisticas.eventosUnidosTotal += 1;
+        break;
+      case 'dejarValoracion':
+        progreso.estadisticas.valoracionesTotal += 1;
+        break;
+      case 'hacerAmigo':
+        progreso.estadisticas.amigosTotal += 1;
+        break;
+    }
+
+    const nivelNuevo = this.calcularNivel(progreso.puntos);
+    progreso.nivel = nivelNuevo;
+
+    const subisteDeNivel = nivelAnterior !== nivelNuevo;
+
+    await progreso.save();
+
+    const insigniasDesbloqueadas =
+      await this.verificarInsigniasConRetorno(usuarioId);
+
+    logger.info(
+      `Usuario ${usuarioId} recibió ${puntos} puntos por ${accion}. Total: ${progreso.puntos}. Nivel: ${nivelAnterior} -> ${nivelNuevo}`,
+    );
+
+    return {
+      puntosGanados: puntos,
+      accion: accion === 'asistirEvento' ? 'unirseEvento' : (accion as any),
+      insigniasDesbloqueadas,
+      nivelAnterior,
+      nivelNuevo,
+      subisteDeNivel,
+    };
   }
 
   async otorgarPuntos(
@@ -89,6 +152,68 @@ export class GamificacionService {
       (n) => puntos >= n.puntosMin && puntos <= n.puntosMax,
     );
     return nivel ? nivel.nombre : 'Novato';
+  }
+
+  private async verificarInsigniasConRetorno(
+    usuarioId: string,
+  ): Promise<IInsignia[]> {
+    const progreso = await UsuarioProgreso.findOne({ usuario: usuarioId })
+      .populate('insignias')
+      .exec();
+
+    if (!progreso) {
+      logger.warn(`No se encontró progreso para usuario ${usuarioId}`);
+      return [];
+    }
+
+    const todasInsignias = await Insignia.find().exec();
+    const insigniasActualesIds = new Set(
+      progreso.insignias.map((i: Types.ObjectId | IInsignia) => {
+        return (typeof i === 'object' && '_id' in i ? i._id : i).toString();
+      }),
+    );
+
+    const insigniasDesbloqueadas: IInsignia[] = [];
+
+    for (const insignia of todasInsignias) {
+      const insigniaIdStr = insignia._id.toString();
+
+      if (insigniasActualesIds.has(insigniaIdStr)) {
+        continue;
+      }
+
+      const cumple = this.cumpleCriterios(progreso, insignia);
+
+      if (cumple) {
+        const progresoActualizado = await UsuarioProgreso.findById(
+          progreso._id,
+        );
+        if (!progresoActualizado) continue;
+
+        const yaLaTiene = progresoActualizado.insignias.some(
+          (i: Types.ObjectId | IInsignia) => i.toString() === insigniaIdStr,
+        );
+
+        if (!yaLaTiene) {
+          await UsuarioProgreso.findByIdAndUpdate(
+            progreso._id,
+            {
+              $addToSet: { insignias: insignia._id },
+              $inc: { puntos: insignia.puntos },
+            },
+            { new: true },
+          );
+
+          insigniasDesbloqueadas.push(insignia);
+
+          logger.info(
+            `Usuario ${usuarioId} desbloqueó insignia: ${insignia.nombre} (+${insignia.puntos} puntos)`,
+          );
+        }
+      }
+    }
+
+    return insigniasDesbloqueadas;
   }
 
   async verificarInsignias(usuarioId: string): Promise<void> {

@@ -14,7 +14,7 @@ const RESEND_COOLDOWN_MS = 60 * 1000;
 
 export async function register(req: Request, res: Response): Promise<Response> {
   try {
-    const { username, gmail, password, birthday } = req.body;
+    const { username, gmail, password, birthday, interests } = req.body;
 
     const existingUser = await Usuario.findOne({
       $or: [{ username }, { gmail }],
@@ -34,6 +34,7 @@ export async function register(req: Request, res: Response): Promise<Response> {
       gmail,
       password,
       birthday,
+      interests: interests || [],
       rol: 'usuario',
       accountStatus: 'PENDING_EMAIL',
       otpHash,
@@ -411,7 +412,6 @@ export async function loginWithGoogle(req: Request, res: Response) {
   }
 }
 
-/* Create admin only development */
 export async function createAdminUser(
   req: Request,
   res: Response,

@@ -944,9 +944,9 @@ export async function acceptFriendRequest(req: Request, res: Response) {
       return res.status(400).json({ ok: false, message: 'IDs inválidos' });
     }
 
-    const updatedUser = await userService.acceptFriendRequest(id, requesterId);
+    const result = await userService.acceptFriendRequest(id, requesterId);
 
-    if (!updatedUser) {
+    if (!result) {
       return res
         .status(404)
         .json({ ok: false, message: 'Usuario no encontrado' });
@@ -968,7 +968,8 @@ export async function acceptFriendRequest(req: Request, res: Response) {
     return res.status(200).json({
       ok: true,
       message: 'Solicitud aceptada',
-      user: updatedUser,
+      rewardDataUser: result.rewardDataUser,
+      rewardDataRequester: result.rewardDataRequester,
     });
   } catch (error) {
     logger.error(`Error en acceptFriendRequest: ${String(error)}`);
