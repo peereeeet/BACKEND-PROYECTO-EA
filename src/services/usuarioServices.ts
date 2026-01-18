@@ -51,6 +51,17 @@ export class UserService {
     return await Usuario.find();
   }
 
+  async getVisibleUsers(currentUserId: string): Promise<IUsuario[] | null> {
+    if (!Types.ObjectId.isValid(currentUserId)) {
+      throw new Error('Invalid user id');
+    }
+
+    return await Usuario.find({
+      _id: { $ne: new Types.ObjectId(currentUserId) },
+      rol: { $ne: 'admin' },
+    });
+  }
+
   async getUserById(id: string): Promise<IUsuario | null> {
     return await Usuario.findById(id);
   }

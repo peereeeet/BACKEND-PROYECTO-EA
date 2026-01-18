@@ -41,6 +41,7 @@ import {
   deleteEventChatMessage,
   uploadChatImage,
   deleteChatMessage,
+  getVisibleUsers,
 } from '../controller/usuarioController';
 import {
   validateUserContent,
@@ -125,6 +126,33 @@ router.get('/', getAllUsers);
  *         description: Error en los datos del usuario
  */
 router.post('/', registerValidation, validateUserContent, createUser);
+
+/**
+ * @swagger
+ * /api/user/visible:
+ *   get:
+ *     summary: Obtener usuarios visibles (excluye al usuario actual y admins)
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de usuarios visibles obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Usuario'
+ *                 totalItems:
+ *                   type: number
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/visibleusers', authenticateToken, getVisibleUsers);
 
 /**
  * @swagger

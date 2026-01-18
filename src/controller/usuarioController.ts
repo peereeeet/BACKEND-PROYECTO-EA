@@ -194,6 +194,37 @@ export const getAllUsers = async (
   }
 };
 
+export const getVisibleUsers = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const authId = (req as any)?.user?.id || (req as any)?.user?.payload?.id;
+
+    if (!authId) {
+      logger.warn(
+        'No se proporcionó ID de usuario autenticado en getVisibleUsers',
+      );
+      res.status(401).json({ message: 'No autenticado' });
+      return;
+    }
+
+    const users = await userService.getVisibleUsers(authId);
+    logger.info(
+      `Usuarios visibles obtenidos para usuario ${authId}: ${users?.length || 0} usuarios`,
+    );
+    res.status(200).json({
+      data: users || [],
+      totalItems: users?.length || 0,
+    });
+  } catch (error) {
+    logger.error(`Error al obtener usuarios visibles: ${error}`);
+    res
+      .status(500)
+      .json({ message: 'Error al obtener usuarios visibles', error });
+  }
+};
+
 export async function getUserById(
   req: Request,
   res: Response,
