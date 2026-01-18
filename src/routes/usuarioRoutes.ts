@@ -14,7 +14,7 @@ import {
   uploadProfilePhoto,
   deleteProfilePhoto,
   loginUser,
-  createAdminUser,
+  //createAdminUser,
   checkEmailExists,
   checkUsernameExists,
   disableUser,
@@ -515,7 +515,7 @@ router.post('/auth/google', loginWithGoogle);
 
 router.post('/auth/google/check', checkGoogleUser);
 
-/**
+/*
  * @swagger
  * /api/user/auth/create-admin:
  *   post:
@@ -524,8 +524,8 @@ router.post('/auth/google/check', checkGoogleUser);
  *     responses:
  *       200:
  *         description: Usuario admin creado/verificado
- */
-router.post('/auth/create-admin', createAdminUser);
+ 
+router.post('/auth/create-admin', createAdminUser);*/
 
 /**
  * @swagger
