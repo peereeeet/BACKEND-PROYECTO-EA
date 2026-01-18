@@ -24,15 +24,7 @@ async function createAdmin() {
     const adminUser = new Usuario({
       username,
       gmail: email,
-      password, // Password hashing happens in pre-save hook usually, or I should check if I need to hash it manually.
-      // Checking existing code: Usuario model likely has pre-save hash or the service handles it.
-      // In authController "newUser = new Usuario({...})" passes plain password.
-      // Let's verify Usuario model to be sure, but assuming pre-save based on standard practices and authController.
-      // Wait, in authController register: "const newUser = new Usuario({...})" then "await newUser.save()".
-      // If `Usuario` model has logic to hash, good.
-      // Let's check `src/models/usuario.ts` if I can, but I saw `user.comparePassword` in controller.
-      // I'll take a quick look at `src/models/usuario.ts` before running this to ensure password handling is correct.
-      // For now, I will write this assuming standard behavior, but I'll add a check step.
+      password,
       birthday: new Date('1990-01-01'),
       rol: 'admin',
       accountStatus: 'ACTIVE',
