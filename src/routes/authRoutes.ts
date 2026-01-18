@@ -124,7 +124,7 @@ router.post('/google', authController.loginWithGoogle);
 router.post('/refresh', authenticateRefreshToken, authController.refreshToken);
 router.post('/check-email', authController.checkEmailExists);
 router.post('/check-username', authController.checkUsernameExists);
-router.post('/create-admin', authController.createAdminUser);
+//router.post('/create-admin', authController.createAdminUser);
 router.post('/forgot-password/check', authController.checkUserExistsForReset);
 router.post('/reset-password/direct', authController.directResetPassword);
 
