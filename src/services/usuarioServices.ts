@@ -51,15 +51,37 @@ export class UserService {
     return await Usuario.find();
   }
 
-  async getVisibleUsers(currentUserId: string): Promise<IUsuario[] | null> {
+  async getVisibleUsers(
+    currentUserId: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{
+    data: IUsuario[];
+    totalItems: number;
+    totalPages: number;
+    page: number;
+  }> {
     if (!Types.ObjectId.isValid(currentUserId)) {
       throw new Error('Invalid user id');
     }
 
-    return await Usuario.find({
+    const filter = {
       _id: { $ne: new Types.ObjectId(currentUserId) },
       rol: { $ne: 'admin' },
-    });
+    };
+
+    const totalItems = await Usuario.countDocuments(filter);
+    const totalPages = Math.ceil(totalItems / limit);
+    const skip = (page - 1) * limit;
+
+    const users = await Usuario.find(filter).skip(skip).limit(limit);
+
+    return {
+      data: users,
+      totalItems,
+      totalPages,
+      page,
+    };
   }
 
   async getUserById(id: string): Promise<IUsuario | null> {

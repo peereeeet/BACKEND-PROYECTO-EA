@@ -135,6 +135,19 @@ router.post('/', registerValidation, validateUserContent, createUser);
  *     tags: [Usuarios]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Cantidad de usuarios por página
  *     responses:
  *       200:
  *         description: Lista de usuarios visibles obtenida exitosamente
@@ -148,6 +161,10 @@ router.post('/', registerValidation, validateUserContent, createUser);
  *                   items:
  *                     $ref: '#/components/schemas/Usuario'
  *                 totalItems:
+ *                   type: number
+ *                 page:
+ *                   type: number
+ *                 totalPages:
  *                   type: number
  *       401:
  *         description: No autenticado

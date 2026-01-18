@@ -209,14 +209,17 @@ export const getVisibleUsers = async (
       return;
     }
 
-    const users = await userService.getVisibleUsers(authId);
-    logger.info(
-      `Usuarios visibles obtenidos para usuario ${authId}: ${users?.length || 0} usuarios`,
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(
+      1,
+      Math.min(50, parseInt(req.query.limit as string) || 10),
     );
-    res.status(200).json({
-      data: users || [],
-      totalItems: users?.length || 0,
-    });
+
+    const result = await userService.getVisibleUsers(authId, page, limit);
+    logger.info(
+      `Usuarios visibles obtenidos para usuario ${authId}: ${result.totalItems} usuarios encontrados en total, pagina ${page}`,
+    );
+    res.status(200).json(result);
   } catch (error) {
     logger.error(`Error al obtener usuarios visibles: ${error}`);
     res
