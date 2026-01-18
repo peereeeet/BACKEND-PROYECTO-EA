@@ -68,7 +68,6 @@ app.use('/uploads', (req, res, next) => {
 
 import authRoutes from './routes/authRoutes';
 
-// Rutas de API
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/auth', authRoutes);
 app.use('/api/user', usuarioRoutes);
@@ -139,7 +138,6 @@ async function cleanupOldNotificaciones() {
   }
 }
 
-////////////////////// CONEXIÓN A BBDD //////////////////////
 mongoose
   .connect('mongodb://127.0.0.1:27017/BBDD', {
     serverSelectionTimeoutMS: 5000,
@@ -181,7 +179,6 @@ mongoose
     logger.error(`HAY ALGUN ERROR CON LA CONEXION: ${err}`);
   });
 
-////////////////////// SOCKET.IO: ONLINE / OFFLINE //////////////////////
 function getChatRoomId(a: string, b: string): string {
   return [a, b].sort().join(':');
 }

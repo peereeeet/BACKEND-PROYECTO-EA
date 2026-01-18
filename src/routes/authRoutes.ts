@@ -120,8 +120,6 @@ router.post('/forgot-password', authController.forgotPassword);
  *         description: Usuario no encontrado
  */
 router.post('/reset-password', authController.resetPassword);
-
-// New centralized routes
 router.post('/google', authController.loginWithGoogle);
 router.post('/refresh', authenticateRefreshToken, authController.refreshToken);
 router.post('/check-email', authController.checkEmailExists);
