@@ -146,7 +146,7 @@ mongoose
   .then(async () => {
     logger.info('CONEXION EXITOSA A LA BASE DE DATOS DE MONGODB');
 
-    await usuarioServices.createAdminUser();
+    //await usuarioServices.createAdminUser();
     await gamificacionService.inicializarInsignias();
 
     setInterval(checkEventReminders, 60 * 60 * 1000);

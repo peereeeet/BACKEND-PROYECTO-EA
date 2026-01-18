@@ -739,7 +739,7 @@ export async function loginWithGoogle(req: Request, res: Response) {
   }
 }
 
-export async function createAdminUser(
+/*export async function createAdminUser(
   req: Request,
   res: Response,
 ): Promise<Response> {
@@ -749,7 +749,7 @@ export async function createAdminUser(
   } catch (_error) {
     return res.status(500).json({ error: 'Error con usuario admin' });
   }
-}
+}*/
 
 export const checkEmailExists = async (req: Request, res: Response) => {
   try {

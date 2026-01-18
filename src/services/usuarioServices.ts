@@ -173,7 +173,7 @@ export class UserService {
     }
   }
 
-  async createAdminUser(): Promise<void> {
+  /*async createAdminUser(): Promise<void> {
     try {
       const adminExists = await Usuario.findOne({ username: 'admin' });
       if (!adminExists) {
@@ -192,7 +192,7 @@ export class UserService {
     } catch (error) {
       logger.error(`Error creando usuario admin: ${error}`);
     }
-  }
+  }*/
 
   async findUserByEmailOrUsername(emailOrUsername: string) {
     if (!emailOrUsername || typeof emailOrUsername !== 'string') return null;
