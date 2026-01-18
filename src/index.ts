@@ -20,6 +20,8 @@ import { logger } from './config/logger';
 import { ProfanityFilter } from './profanityFilter';
 import Usuario from './models/usuario';
 import Evento from './models/evento';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 
 const app = express();
 const PORT = 3000;
@@ -67,6 +69,7 @@ app.use('/uploads', (req, res, next) => {
 import authRoutes from './routes/authRoutes';
 
 // Rutas de API
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/auth', authRoutes);
 app.use('/api/user', usuarioRoutes);
 app.use('/api/event', eventoRoutes);
