@@ -4,7 +4,6 @@ import {
   createEventoFromPanel,
   getAllEventos,
   getUpcomingEventos,
-  getEventoById,
   updateEventoById,
   checkEventNameExists,
   deleteEventoById,
@@ -22,9 +21,12 @@ import {
   removeInvitedUserFromEvent,
   getEventosVisibles,
   getCalendarEvents,
+  getRecommendedEventos,
+  uploadEventChatImage,
 } from '../controller/eventoController';
 import { authenticateToken } from '../auth/middleware';
 import { validateEventContent } from '../profanityMiddleware';
+import { uploadEventChatImage as uploadEventChatImageMulter } from '../config/uploadEventChatConfig';
 
 const router = Router();
 
@@ -92,6 +94,22 @@ router.get('/upcoming', getUpcomingEventos);
 
 /**
  * @swagger
+ * /api/event/recommended:
+ *   get:
+ *     summary: Obtener eventos recomendados para el usuario autenticado
+ *     tags: [Eventos]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de eventos recomendados
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/recommended', authenticateToken, getRecommendedEventos);
+
+/**
+ * @swagger
  * /api/event/search:
  *   get:
  *     summary: Buscar eventos por nombre y/o fecha
@@ -145,7 +163,7 @@ router.get('/upcoming', getUpcomingEventos);
  *       500:
  *         description: Error del servidor
  */
-router.get('/search', searchEventos);
+router.get('/search', authenticateToken, searchEventos);
 
 /**
  * @swagger
@@ -664,59 +682,45 @@ router.get('/visible', authenticateToken, getEventosVisibles);
 
 /**
  * @swagger
- * /api/event/calendar:
- *   get:
- *     summary: Obtener eventos para vista de calendario (rango de fechas)
+ * /api/event/{id}/chat-image:
+ *   post:
+ *     summary: Subir una imagen al chat del evento
  *     tags: [Eventos]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: dateFrom
- *         required: true
- *         schema:
- *           type: string
- *           format: date-time
- *       - in: query
- *         name: dateTo
- *         required: true
- *         schema:
- *           type: string
- *           format: date-time
- *     responses:
- *       200:
- *         description: Lista de eventos en el rango
- *       400:
- *         description: Parámetros faltantes o inválidos
- *       401:
- *         description: No autenticado
- */
-
-/**
- * @swagger
- * /api/event/{id}:
- *   get:
- *     summary: Obtener un evento por ID
- *     tags: [Eventos]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: string
+ *         description: ID del evento
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
  *     responses:
  *       200:
- *         description: Evento encontrado
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Evento'
+ *         description: Imagen subida correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: Solo los participantes pueden enviar imágenes
  *       404:
  *         description: Evento no encontrado
  *       500:
  *         description: Error del servidor
  */
-
-router.get('/:id', authenticateToken, getEventoById);
+router.post(
+  '/:id/chat-image',
+  authenticateToken,
+  uploadEventChatImageMulter.single('image'),
+  uploadEventChatImage,
+);
 
 export default router;

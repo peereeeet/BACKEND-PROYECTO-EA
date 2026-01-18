@@ -3,99 +3,184 @@ dotenv.config();
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
+import path from 'path';
 import usuarioRoutes from './routes/usuarioRoutes';
-import swaggerUi from 'swagger-ui-express';
-import swaggerSpec from './config/swagger';
 import eventoRoutes from './routes/eventoRoutes';
+import { UserService } from './services/usuarioServices';
 import valoracionRoutes from './routes/valoracionRoutes';
 import gamificacionRoutes from './routes/gamificacionRoutes';
 import gamificacionService from './services/gamificacionServices';
 import aiRoutes from './routes/aiRoutes';
-import { UserService } from './services/usuarioServices';
+import notificacionRoutes from './routes/notificacionRoutes';
+import notificacionService from './services/notificacionServices';
+import { cleanupOldEventPhotos } from './controller/eventoController';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { logger } from './config/logger';
 import { ProfanityFilter } from './profanityFilter';
+import Usuario from './models/usuario';
+import Evento from './models/evento';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 
-// ----------- APP & SERVER ----------- //
 const app = express();
 const PORT = process.env.PORT || 3000;
 const usuarioServices = new UserService();
 const httpServer = createServer(app);
 
-// ----------- MIDDLEWARES ----------- //
-const allowedOrigins = [
-  'https://ea2.upc.edu',
-  'https://ea2-api.upc.edu',
-  'http://localhost:4200',
-  'http://localhost:8080',
-];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        logger.warn({ origin }, 'Origen CORS no permitido');
-        callback(null, false);
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  }),
-);
-
-app.use(express.json());
-
-// ----------- SWAGGER ----------- //
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// ----------- ROUTES ----------- //
-app.use('/api/user', usuarioRoutes);
-app.use('/api/event', eventoRoutes);
-app.use('/api/ratings', valoracionRoutes);
-app.use('/api/gamificacion', gamificacionRoutes);
-app.use('/api/ai', aiRoutes);
-
-// ----------- DATABASE ----------- //
-const mongoURL = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/BBDD';
-
-mongoose
-  .connect(mongoURL)
-  .then(async () => {
-    logger.info({ url: mongoURL }, 'MongoDB conectado correctamente');
-
-    await usuarioServices.createAdminUser();
-    await gamificacionService.inicializarInsignias();
-
-    httpServer.listen(PORT, '0.0.0.0' as any, () => {
-      logger.info(`Backend escuchando en http://0.0.0.0:${PORT}`);
-      logger.info(`Swagger en http://0.0.0.0:${PORT}/api-docs`);
-    });
-  })
-  .catch((err) => {
-    logger.error({ error: err }, 'Error al conectar a MongoDB');
-  });
-
-// ----------- SOCKET.IO ----------- //
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: 'http://localhost:4200',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   },
 });
 
-////////////////////// SOCKET.IO: ONLINE / OFFLINE //////////////////////
-function getChatRoomId(a: string, b: string): string {
-  return [a, b].sort().join(':');
+////////////////////// MIDDLEWARE CORS + JSON //////////////////////
+app.use(
+  cors({
+    origin: 'http://localhost:4200',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }),
+);
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(
+  '/uploads/profile-photos',
+  express.static(path.join(__dirname, 'public', 'uploads', 'profile-photos')),
+);
+app.use(
+  '/uploads/event-chat',
+  express.static(path.join(__dirname, 'public', 'uploads', 'event-chat')),
+);
+app.use(
+  '/uploads/friend-chat',
+  express.static(path.join(__dirname, 'public', 'uploads', 'friend-chat')),
+);
+
+app.use('/uploads', (req, res, next) => {
+  logger.info(`📂 Archivo solicitado: ${req.url}`);
+  next();
+});
+
+import authRoutes from './routes/authRoutes';
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api/auth', authRoutes);
+app.use('/api/user', usuarioRoutes);
+app.use('/api/event', eventoRoutes);
+app.use('/api/ratings', valoracionRoutes);
+app.use('/api/gamificacion', gamificacionRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/notificaciones', notificacionRoutes);
+
+async function checkEventReminders() {
+  try {
+    const now = new Date();
+    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+    const upcomingEvents = await Evento.find({
+      schedule: {
+        $gte: in24Hours,
+        $lt: in25Hours,
+      },
+    })
+      .populate('participantes', '_id username')
+      .lean();
+
+    logger.info(
+      `🔔 Revisando recordatorios: ${upcomingEvents.length} eventos encontrados`,
+    );
+
+    for (const evento of upcomingEvents) {
+      const participantes = (evento.participantes || []) as unknown as {
+        _id: mongoose.Types.ObjectId;
+        username: string;
+      }[];
+
+      for (const participante of participantes) {
+        if (participante && participante._id) {
+          try {
+            await notificacionService.notifyEventReminder(
+              participante._id.toString(),
+              evento._id.toString(),
+              evento.name,
+              new Date(evento.schedule),
+            );
+            logger.info(
+              `✅ Recordatorio enviado a ${participante.username} para evento "${evento.name}"`,
+            );
+          } catch (err) {
+            logger.error(
+              `❌ Error enviando recordatorio a ${participante._id}: ${String(err)}`,
+            );
+          }
+        }
+      }
+    }
+  } catch (error) {
+    logger.error(`❌ Error en checkEventReminders: ${String(error)}`);
+  }
 }
 
-function getEventRoomId(eventId: string): string {
-  return `event:${eventId}`;
+async function cleanupOldNotificaciones() {
+  try {
+    const deleted = await notificacionService.deleteOldNotificaciones();
+    logger.info(
+      `🗑️ Limpieza automática: ${deleted} notificaciones antiguas eliminadas`,
+    );
+  } catch (error) {
+    logger.error(`❌ Error en limpieza de notificaciones: ${String(error)}`);
+  }
+}
+
+mongoose
+  .connect('mongodb://127.0.0.1:27017/BBDD', {
+    serverSelectionTimeoutMS: 5000,
+    family: 4,
+  } as mongoose.ConnectOptions)
+  .then(async () => {
+    logger.info('CONEXION EXITOSA A LA BASE DE DATOS DE MONGODB');
+
+    //await usuarioServices.createAdminUser();
+    await gamificacionService.inicializarInsignias();
+
+    setInterval(checkEventReminders, 60 * 60 * 1000);
+    logger.info(
+      '⏰ Cron job de recordatorios de eventos iniciado (cada 1 hora)',
+    );
+    checkEventReminders();
+
+    setInterval(cleanupOldNotificaciones, 24 * 60 * 60 * 1000);
+    logger.info(
+      '🗑️ Cron job de limpieza de notificaciones iniciado (cada 24 horas)',
+    );
+    cleanupOldNotificaciones();
+
+    setInterval(cleanupOldEventPhotos, 24 * 60 * 60 * 1000);
+    logger.info(
+      '🗑️ Cron job de limpieza de fotos de eventos iniciado (cada 24 horas)',
+    );
+    cleanupOldEventPhotos();
+
+    httpServer.listen(PORT, () => {
+      logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
+      logger.info(`Swagger docs en http://localhost:${PORT}/api-docs`);
+      logger.info(
+        `📂 Archivos estáticos: ${path.join(__dirname, 'public', 'uploads')}`,
+      );
+    });
+  })
+  .catch((err) => {
+    logger.error(`HAY ALGUN ERROR CON LA CONEXION: ${err}`);
+  });
+
+function getChatRoomId(a: string, b: string): string {
+  return [a, b].sort().join(':');
 }
 
 interface SocketData {
@@ -108,14 +193,29 @@ io.on('connection', (socket) => {
   socket.on('user:online', async (userId: string) => {
     try {
       if (!userId) return;
+
       const data = socket.data as SocketData;
       data.userId = userId;
+
       socket.join(`user:${userId}`);
+
       await usuarioServices.setUserOnline(userId);
+
       io.emit('user:online', { userId });
       logger.info(`🟢 Usuario online: ${userId}`);
     } catch (err) {
       logger.error(`Error en user:online: ${err}`);
+    }
+  });
+
+  socket.on('user:force_offline', async (userId: string) => {
+    try {
+      if (!userId) return;
+      await usuarioServices.setUserOffline(userId);
+      io.emit('user:offline', { userId });
+      logger.info(`🌙 Usuario en modo invisible (background): ${userId}`);
+    } catch (err) {
+      logger.error(`Error en user:force_offline: ${err}`);
     }
   });
 
@@ -124,73 +224,215 @@ io.on('connection', (socket) => {
       const data = socket.data as SocketData;
       const userId = data.userId;
       if (!userId) return;
+
       await usuarioServices.setUserOffline(userId);
       io.emit('user:offline', { userId });
-      logger.info({ userId }, '🔴 Usuario offline');
+      logger.info(`🔴 Usuario offline (disconnect): ${userId}`);
     } catch (err) {
-      logger.error({ error: err }, 'Error al desconectar usuario');
+      logger.error(`Error al marcar offline en disconnect: ${err}`);
     }
   });
 
-  socket.on('chat:join', ({ userId, friendId }) => {
+  socket.on('chat:join', (payload: { userId: string; friendId: string }) => {
     try {
-      if (!userId || !friendId) return;
-      socket.join(getChatRoomId(userId, friendId));
+      if (!payload?.userId || !payload?.friendId) return;
+      const roomId = getChatRoomId(payload.userId, payload.friendId);
+      socket.join(roomId);
+      logger.info(`💬 Usuario ${payload.userId} unido a chat room: ${roomId}`);
     } catch (err) {
       logger.error(`Error en chat:join: ${err}`);
     }
   });
 
-  socket.on('chat:message', async ({ from, to, text }) => {
-    try {
-      if (!from || !to || !text?.trim()) return;
-      const profanityResult = ProfanityFilter.check(text);
-      if (!profanityResult.isClean) {
-        socket.emit('chat:error', {
-          message: ProfanityFilter.getErrorMessage(
-            profanityResult.foundWords,
-            'es',
-          ),
-          code: 'INAPPROPRIATE_CONTENT',
-        });
-        return;
-      }
-      const msg = await usuarioServices.addChatMessage(from, to, text.trim());
-      const roomId = getChatRoomId(from, to);
-      io.to(roomId).emit('chat:message', msg);
-    } catch (err) {
-      logger.error(`Error en chat:message: ${err}`);
-    }
-  });
+  socket.on(
+    'chat:message',
+    async (payload: {
+      from: string;
+      to: string;
+      text: string;
+      imageUrl?: string;
+    }) => {
+      try {
+        const { from, to, text, imageUrl } = payload;
+        if (!from || !to) return;
+        if ((!text || !text.trim()) && !imageUrl) return;
 
-  socket.on('eventChat:join', ({ eventId }) => {
-    if (!eventId) return;
-    socket.join(getEventRoomId(eventId));
+        if (text && text.trim()) {
+          const profanityResult = ProfanityFilter.check(text);
+          if (!profanityResult.isClean) {
+            socket.emit('chat:error', {
+              message: ProfanityFilter.getErrorMessage(
+                profanityResult.foundWords,
+                'es',
+              ),
+              code: 'INAPPROPRIATE_CONTENT',
+            });
+            return;
+          }
+        }
+
+        try {
+          const savedMessage = await usuarioServices.addChatMessage(
+            from,
+            to,
+            text ? text.trim() : '',
+            imageUrl,
+          );
+          const msg = {
+            _id: String((savedMessage as { _id: mongoose.Types.ObjectId })._id),
+            from: savedMessage.from,
+            to: savedMessage.to,
+            text: savedMessage.text,
+            imageUrl: (savedMessage as any).imageUrl,
+            createdAt: savedMessage.createdAt,
+          };
+
+          const roomId = getChatRoomId(from, to);
+          io.to(roomId).emit('chat:message', msg);
+
+          logger.info(
+            `💬 Mensaje guardado: ${from} → ${to}${imageUrl ? ' (con imagen)' : ''}`,
+          );
+
+          const chatRoom = io.sockets.adapter.rooms.get(roomId);
+          const recipientInChat =
+            chatRoom &&
+            Array.from(chatRoom).some((socketId) => {
+              const s = io.sockets.sockets.get(socketId);
+              const data = s?.data as SocketData;
+              return data?.userId === to;
+            });
+
+          if (!recipientInChat) {
+            try {
+              const fromUser = await Usuario.findById(from)
+                .select('username')
+                .lean();
+              if (fromUser) {
+                const notificacion = await notificacionService.notifyNewMessage(
+                  to,
+                  from,
+                  fromUser.username,
+                );
+
+                if (notificacion) {
+                  logger.info(
+                    `✅ Notificación creada y enviada via Socket.IO a user:${to}`,
+                  );
+                } else {
+                  logger.error(
+                    `❌ No se pudo crear la notificación de mensaje`,
+                  );
+                }
+              }
+            } catch (notifError) {
+              logger.error(
+                `❌ Error al enviar notificación de mensaje: ${notifError}`,
+              );
+            }
+          }
+        } catch (saveError) {
+          logger.error(`Error al guardar mensaje: ${saveError}`);
+          const msg = {
+            _id: new mongoose.Types.ObjectId().toString(),
+            from,
+            to,
+            text: text ? text.trim() : '',
+            imageUrl,
+            createdAt: new Date(),
+          };
+          const roomId = getChatRoomId(from, to);
+          io.to(roomId).emit('chat:message', msg);
+        }
+      } catch (err) {
+        logger.error(`Error en chat:message: ${err}`);
+      }
+    },
+  );
+
+  function getEventRoomId(eventId: string): string {
+    return `event:${eventId}`;
+  }
+
+  socket.on('eventChat:join', (payload: { eventId: string }) => {
+    try {
+      if (!payload?.eventId) return;
+      const roomId = getEventRoomId(payload.eventId);
+      socket.join(roomId);
+      logger.info(`🎉 Usuario unido a event chat room: ${roomId}`);
+    } catch (err) {
+      logger.error(`Error en eventChat:join: ${err}`);
+    }
   });
 
   socket.on(
     'eventChat:message',
-    async ({ eventId, userId, username, text }) => {
+    async (payload: {
+      eventId: string;
+      userId: string;
+      username: string;
+      text: string;
+      imageUrl?: string;
+    }) => {
       try {
-        if (!eventId || !userId || !username || !text?.trim()) return;
-        const profanityResult = ProfanityFilter.check(text);
-        if (!profanityResult.isClean) {
-          socket.emit('chat:error', {
-            message: ProfanityFilter.getErrorMessage(
-              profanityResult.foundWords,
-              'es',
-            ),
-            code: 'INAPPROPRIATE_CONTENT',
-          });
-          return;
+        const { eventId, userId, username, text, imageUrl } = payload;
+
+        if (!eventId || !userId || !username) return;
+        if ((!text || !text.trim()) && !imageUrl) return;
+
+        if (text && text.trim()) {
+          const profanityResult = ProfanityFilter.check(text);
+          if (!profanityResult.isClean) {
+            socket.emit('chat:error', {
+              message: ProfanityFilter.getErrorMessage(
+                profanityResult.foundWords,
+                'es',
+              ),
+              code: 'INAPPROPRIATE_CONTENT',
+            });
+            return;
+          }
         }
-        const msg = await usuarioServices.addEventChatMessage(
-          eventId,
-          userId,
-          username,
-          text.trim(),
-        );
-        io.to(getEventRoomId(eventId)).emit('eventChat:message', msg);
+
+        try {
+          const savedMessage = await usuarioServices.addEventChatMessage(
+            eventId,
+            userId,
+            username,
+            text ? text.trim() : '',
+            imageUrl,
+          );
+
+          const msg = {
+            _id: String((savedMessage as { _id: mongoose.Types.ObjectId })._id),
+            eventId: savedMessage.eventId,
+            userId: savedMessage.userId,
+            username: savedMessage.username,
+            text: savedMessage.text,
+            imageUrl: (savedMessage as any).imageUrl,
+            createdAt: savedMessage.createdAt,
+          };
+
+          const roomId = getEventRoomId(eventId);
+          io.to(roomId).emit('eventChat:message', msg);
+
+          logger.info(
+            `🎉 Mensaje de evento guardado: ${username} en ${eventId}${imageUrl ? ' (con imagen)' : ''}`,
+          );
+        } catch (saveError) {
+          logger.error(`Error al guardar mensaje de evento: ${saveError}`);
+          const msg = {
+            _id: new mongoose.Types.ObjectId().toString(),
+            eventId,
+            userId,
+            username,
+            text: text ? text.trim() : '',
+            imageUrl,
+            createdAt: new Date(),
+          };
+          const roomId = getEventRoomId(eventId);
+          io.to(roomId).emit('eventChat:message', msg);
+        }
       } catch (err) {
         logger.error(`Error en eventChat:message: ${err}`);
       }

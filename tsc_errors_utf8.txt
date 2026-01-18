@@ -1,0 +1,16 @@
+﻿src/auth/middleware.ts(1,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(12,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(24,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(34,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(37,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(40,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(52,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(110,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(186,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(191,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(200,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(213,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(220,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(227,1): error TS1185: Merge conflict marker encountered.
+src/auth/middleware.ts(259,1): error TS1185: Merge conflict marker encountered.
+src/controller/eventoController.ts(815,63): error TS1136: Property assignment expected.

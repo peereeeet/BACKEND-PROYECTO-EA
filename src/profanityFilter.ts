@@ -7,35 +7,129 @@ export interface ProfanityCheckResult {
 export class ProfanityFilter {
   private static readonly BANNED_WORDS = [
     // Español
-    'puta', 'puto', 'cabrón', 'cabron', 'gilipollas', 'idiota', 'imbécil', 'imbecil',
-    'mierda', 'joder', 'coño', 'cono', 'hostia', 'tonto', 'estúpido', 'estupido',
-    'pendejo', 'hijo de puta', 'hijoputa', 'maricón', 'maricon', 'perra', 'zorra',
-    'maldito', 'carajo', 'chingada', 'chingar', 'verga', 'pinche', 'culero',
-    
+    'puta',
+    'puto',
+    'cabrón',
+    'cabron',
+    'gilipollas',
+    'idiota',
+    'imbécil',
+    'imbecil',
+    'mierda',
+    'joder',
+    'coño',
+    'cono',
+    'hostia',
+    'tonto',
+    'estúpido',
+    'estupido',
+    'pendejo',
+    'hijo de puta',
+    'hijoputa',
+    'maricón',
+    'maricon',
+    'perra',
+    'zorra',
+    'maldito',
+    'carajo',
+    'chingada',
+    'chingar',
+    'verga',
+    'pinche',
+    'culero',
+
     // Inglés
-    'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'damn', 'crap', 'dick',
-    'cock', 'pussy', 'ass', 'motherfucker', 'fag', 'retard', 'slut', 'whore',
-    'nigger', 'nigga', 'cunt', 'twat', 'prick', 'wanker', 'bollocks',
-    
+    'fuck',
+    'shit',
+    'bitch',
+    'asshole',
+    'bastard',
+    'damn',
+    'crap',
+    'dick',
+    'cock',
+    'pussy',
+    'ass',
+    'motherfucker',
+    'fag',
+    'retard',
+    'slut',
+    'whore',
+    'nigger',
+    'nigga',
+    'cunt',
+    'twat',
+    'prick',
+    'wanker',
+    'bollocks',
+
     // Catalán
-    'merda', 'cony', 'fill de puta', 'gilipolles', 'imbècil', 'maricó',
-    'puta', 'puto', 'cabrón', 'hostia', 'collons',
-    
+    'merda',
+    'cony',
+    'fill de puta',
+    'gilipolles',
+    'imbècil',
+    'maricó',
+    'puta',
+    'puto',
+    'cabrón',
+    'hostia',
+    'collons',
+
     // Francés
-    'merde', 'putain', 'connard', 'salope', 'con', 'enculé', 'enfoiré',
-    'chier', 'bite', 'couille', 'fils de pute', 'bâtard', 'batard',
-    
+    'merde',
+    'putain',
+    'connard',
+    'salope',
+    'con',
+    'enculé',
+    'enfoiré',
+    'chier',
+    'bite',
+    'couille',
+    'fils de pute',
+    'bâtard',
+    'batard',
+
     // Variaciones con números y símbolos
-    'p*ta', 'p0rn', 'p0rno', 's3x', 'f*ck', 'sh*t', 'a$$', 'b*tch',
-    
+    'p*ta',
+    'p0rn',
+    'p0rno',
+    's3x',
+    'f*ck',
+    'sh*t',
+    'a$$',
+    'b*tch',
+
     // Palabras ofensivas adicionales
-    'nazi', 'hitler', 'racista', 'facha', 'terrorista', 'violador',
-    'asesino', 'matar', 'suicidio', 'drogas', 'cocaína', 'cocaina'
+    'nazi',
+    'hitler',
+    'racista',
+    'facha',
+    'terrorista',
+    'violador',
+    'asesino',
+    'matar',
+    'suicidio',
+    'drogas',
+    'cocaína',
+    'cocaina',
   ];
 
   private static readonly WHITELIST = [
-    'suspenso', 'suspender', 'asunto', 'casual', 'clase', 'clásico', 'clasico',
-    'análisis', 'analisis', 'bassist', 'assistant', 'passion', 'compassion'
+    'suspenso',
+    'suspender',
+    'asunto',
+    'casual',
+    'clase',
+    'clásico',
+    'clasico',
+    'análisis',
+    'analisis',
+    'bassist',
+    'assistant',
+    'passion',
+    'compassion',
   ];
 
   static check(text: string): ProfanityCheckResult {
@@ -46,8 +140,8 @@ export class ProfanityFilter {
     const normalizedText = this.normalize(text);
     const foundWords: string[] = [];
 
-    const isWhitelisted = this.WHITELIST.some(word => 
-      normalizedText.toLowerCase().includes(word.toLowerCase())
+    const isWhitelisted = this.WHITELIST.some((word) =>
+      normalizedText.toLowerCase().includes(word.toLowerCase()),
     );
 
     if (isWhitelisted) {
@@ -64,7 +158,7 @@ export class ProfanityFilter {
     return {
       isClean: foundWords.length === 0,
       foundWords: foundWords,
-      sanitizedText: this.sanitize(text)
+      sanitizedText: this.sanitize(text),
     };
   }
 
@@ -96,12 +190,12 @@ export class ProfanityFilter {
 
   private static sanitize(text: string): string {
     let sanitized = text;
-    
+
     for (const bannedWord of this.BANNED_WORDS) {
       const pattern = new RegExp(`\\b${this.escapeRegex(bannedWord)}\\b`, 'gi');
       sanitized = sanitized.replace(pattern, '***');
     }
-    
+
     return sanitized;
   }
 
@@ -109,9 +203,12 @@ export class ProfanityFilter {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  static checkObject(obj: Record<string, any>, fields: string[]): ProfanityCheckResult {
+  static checkObject(
+    obj: Record<string, any>,
+    fields: string[],
+  ): ProfanityCheckResult {
     const allFoundWords: string[] = [];
-    
+
     for (const field of fields) {
       if (obj[field]) {
         const result = this.check(String(obj[field]));
@@ -120,21 +217,24 @@ export class ProfanityFilter {
         }
       }
     }
-    
+
     return {
       isClean: allFoundWords.length === 0,
-      foundWords: [...new Set(allFoundWords)]
+      foundWords: [...new Set(allFoundWords)],
     };
   }
 
-  static getErrorMessage(foundWords: string[], lang: 'es' | 'en' | 'cat' | 'fr' = 'es'): string {
+  static getErrorMessage(
+    foundWords: string[],
+    lang: 'es' | 'en' | 'cat' | 'fr' = 'es',
+  ): string {
     const messages = {
       es: `Tu mensaje contiene lenguaje inapropiado. Por favor, revisa el contenido y vuelve a intentarlo.`,
       en: `Your message contains inappropriate language. Please review the content and try again.`,
       cat: `El teu missatge conté llenguatge inadequat. Si us plau, revisa el contingut i torna-ho a intentar.`,
-      fr: `Votre message contient un langage inapproprié. Veuillez revoir le contenu et réessayer.`
+      fr: `Votre message contient un langage inapproprié. Veuillez revoir le contenu et réessayer.`,
     };
-    
+
     return messages[lang] || messages.es;
   }
 }

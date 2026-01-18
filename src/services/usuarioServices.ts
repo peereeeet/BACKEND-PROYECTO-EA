@@ -4,6 +4,8 @@ import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import {
   ChatMessageModel,
   IChatMessage,
@@ -12,12 +14,25 @@ import {
 } from '../models/usuario';
 import { io } from '../index';
 import gamificacionService from './gamificacionServices';
+import notificacionService from './notificacionServices';
+
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
 
 function oid(id: string): Types.ObjectId {
   if (!Types.ObjectId.isValid(id)) {
     throw new Error(`INVALID_OBJECT_ID:${id}`);
   }
   return new Types.ObjectId(id);
+}
+
+function transformProfilePhotoUrl(
+  photoPath: string | null | undefined,
+): string | null {
+  if (!photoPath) return null;
+  if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
+    return photoPath;
+  }
+  return `${SERVER_URL}${photoPath}`;
 }
 
 export class UserService {
@@ -34,6 +49,39 @@ export class UserService {
 
   async getAllUsers(): Promise<IUsuario[] | null> {
     return await Usuario.find();
+  }
+
+  async getVisibleUsers(
+    currentUserId: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{
+    data: IUsuario[];
+    totalItems: number;
+    totalPages: number;
+    page: number;
+  }> {
+    if (!Types.ObjectId.isValid(currentUserId)) {
+      throw new Error('Invalid user id');
+    }
+
+    const filter = {
+      _id: { $ne: new Types.ObjectId(currentUserId) },
+      rol: { $ne: 'admin' },
+    };
+
+    const totalItems = await Usuario.countDocuments(filter);
+    const totalPages = Math.ceil(totalItems / limit);
+    const skip = (page - 1) * limit;
+
+    const users = await Usuario.find(filter).skip(skip).limit(limit);
+
+    return {
+      data: users,
+      totalItems,
+      totalPages,
+      page,
+    };
   }
 
   async getUserById(id: string): Promise<IUsuario | null> {
@@ -76,7 +124,7 @@ export class UserService {
     const user = await Usuario.findById(id).exec();
     if (!user) return false;
 
-    const stored = (user as any).password;
+    const stored = user.password;
 
     let match = false;
     if (stored && typeof stored === 'string') {
@@ -147,8 +195,7 @@ export class UserService {
     }
   }
 
-  /* Create default admin user */
-  async createAdminUser(): Promise<void> {
+  /*async createAdminUser(): Promise<void> {
     try {
       const adminExists = await Usuario.findOne({ username: 'admin' });
       if (!adminExists) {
@@ -165,9 +212,9 @@ export class UserService {
         logger.info('Usuario admin ya existe');
       }
     } catch (error) {
-      logger.error({ error }, 'Error creando usuario admin');
+      logger.error(`Error creando usuario admin: ${error}`);
     }
-  }
+  }*/
 
   async findUserByEmailOrUsername(emailOrUsername: string) {
     if (!emailOrUsername || typeof emailOrUsername !== 'string') return null;
@@ -186,11 +233,6 @@ export class UserService {
     await user.save();
   }
 
-  /**
-   * Busca un usuario por su ID y actualiza su estado a inactivo.
-   * @param id - El ID del usuario a deshabilitar.
-   * @returns El documento del usuario actualizado o null si no se encontró.
-   */
   async disableUser(id: string): Promise<IUsuario | null> {
     const user = await Usuario.findById(id);
     if (!user) {
@@ -207,7 +249,7 @@ export class UserService {
   }
 
   async listUsers(page = 1, limit = 20, q = '') {
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
     if (q) {
       filter.$or = [
         { username: { $regex: q, $options: 'i' } },
@@ -215,11 +257,18 @@ export class UserService {
       ];
     }
     const totalItems = await Usuario.countDocuments(filter);
-    const data = await Usuario.find(filter)
+    const rawData = await Usuario.find(filter)
       .sort({ username: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select('_id username gmail online');
+      .select('_id username gmail online profilePhoto')
+      .lean();
+
+    const data = rawData.map((user: IUsuario) => ({
+      ...user,
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto),
+    }));
+
     return {
       data,
       page,
@@ -235,7 +284,7 @@ export class UserService {
     const me = await Usuario.findById(userId).select('friends');
     const friendsIds = me?.friends ?? [];
 
-    const filter: any = { _id: { $in: friendsIds } };
+    const filter: Record<string, unknown> = { _id: { $in: friendsIds } };
     if (q) {
       filter.$or = [
         { username: { $regex: q, $options: 'i' } },
@@ -244,11 +293,17 @@ export class UserService {
     }
 
     const totalItems = await Usuario.countDocuments(filter);
-    const data = await Usuario.find(filter)
+    const rawData = await Usuario.find(filter)
       .sort({ username: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select('_id username gmail online');
+      .select('_id username gmail online profilePhoto')
+      .lean();
+
+    const data = rawData.map((user: IUsuario) => ({
+      ...user,
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto),
+    }));
 
     return {
       data,
@@ -303,10 +358,10 @@ export class UserService {
     ]);
 
     const debug = {
-      toMatched: r1.matchedCount ?? (r1 as any).nMatched,
-      toModified: r1.modifiedCount ?? (r1 as any).nModified,
-      fromMatched: r2.matchedCount ?? (r2 as any).nMatched,
-      fromModified: r2.modifiedCount ?? (r2 as any).nModified,
+      toMatched: r1.matchedCount,
+      toModified: r1.modifiedCount,
+      fromMatched: r2.matchedCount,
+      fromModified: r2.modifiedCount,
     };
 
     const [toAfter, fromAfter] = await Promise.all([
@@ -319,6 +374,8 @@ export class UserService {
       fromUsername: from.username,
       fromGmail: from.gmail,
     });
+
+    await notificacionService.notifyFriendRequest(toId, fromId, from.username);
 
     return {
       ok: true,
@@ -372,16 +429,35 @@ export class UserService {
       ),
     ]);
 
+    let rewardDataUser = null;
+    let rewardDataRequester = null;
+
     try {
-      await Promise.all([
-        gamificacionService.otorgarPuntos(userId, 'hacerAmigo'),
-        gamificacionService.otorgarPuntos(requesterId, 'hacerAmigo'),
+      const results = await Promise.all([
+        gamificacionService.otorgarPuntosConRecompensa(userId, 'hacerAmigo'),
+        gamificacionService.otorgarPuntosConRecompensa(
+          requesterId,
+          'hacerAmigo',
+        ),
       ]);
+      rewardDataUser = results[0];
+      rewardDataRequester = results[1];
     } catch (err) {
       logger.error(`Error al otorgar puntos por amistad: ${err}`);
     }
 
-    return { message: 'Solicitud aceptada correctamente' };
+    const userInfo = await Usuario.findById(userId).select('username').lean();
+    await notificacionService.notifyFriendAccepted(
+      requesterId,
+      userId,
+      userInfo?.username || 'Usuario',
+    );
+
+    return {
+      message: 'Solicitud aceptada correctamente',
+      rewardDataUser,
+      rewardDataRequester,
+    };
   }
 
   async rejectFriendRequest(userId: string, requesterId: string) {
@@ -407,13 +483,24 @@ export class UserService {
   }
 
   async getFriendRequests(userId: string) {
-    const user = await Usuario.findById(userId).populate(
-      'friendRequest',
-      'username gmail',
-    );
-    if (!user) throw new Error('Usuario no encontrado');
-    logger.info('Enviando solicitudes de amistad');
-    return user.friendRequest;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID inválido');
+    }
+    const user = await Usuario.findById(userId).select('friendRequest');
+    if (!user) {
+      throw new Error('Usuario no encontrado');
+    }
+    const requestersIds = user.friendRequest;
+    const rawRequesters = await Usuario.find({ _id: { $in: requestersIds } })
+      .select('_id username gmail online profilePhoto')
+      .lean();
+
+    const requesters = rawRequesters.map((user: IUsuario) => ({
+      ...user,
+      profilePhoto: transformProfilePhotoUrl(user.profilePhoto),
+    }));
+
+    return requesters;
   }
 
   async getSentRequests(userId: string) {
@@ -422,17 +509,20 @@ export class UserService {
     }
 
     const user = await Usuario.findById(userId)
-      .populate('sentRequests', 'username gmail online')
+      .populate('sentRequests', 'username gmail online profilePhoto')
       .lean();
 
     if (!user) throw new Error('Usuario no encontrado');
 
-    const arr = (user.sentRequests ?? []).map((u: any) => ({
-      _id: String(u._id),
-      username: u.username,
-      gmail: u.gmail,
-      isOnline: !!(u.online ?? u.isOnline),
-    }));
+    const arr = ((user.sentRequests as unknown as IUsuario[]) ?? []).map(
+      (u: IUsuario) => ({
+        _id: String(u._id),
+        username: u.username,
+        gmail: u.gmail,
+        isOnline: !!u.online,
+        profilePhoto: transformProfilePhotoUrl(u.profilePhoto),
+      }),
+    );
     return arr;
   }
 
@@ -522,22 +612,68 @@ export class UserService {
   }
 
   async getChatBetween(
-    _userId: string,
-    _friendId: string,
+    userId: string,
+    friendId: string,
   ): Promise<IChatMessage[]> {
-    return [];
+    try {
+      const messages = await ChatMessageModel.find({
+        $or: [
+          { from: userId, to: friendId },
+          { from: friendId, to: userId },
+        ],
+      })
+        .sort({ createdAt: 1 })
+        .lean();
+
+      logger.info(
+        `Chat entre ${userId} y ${friendId}: ${messages.length} mensajes`,
+      );
+      return messages;
+    } catch (error) {
+      logger.error(`Error al obtener chat: ${error}`);
+      return [];
+    }
   }
 
   async addChatMessage(
     from: string,
     to: string,
     text: string,
+    imageUrl?: string,
   ): Promise<IChatMessage> {
-    return new ChatMessageModel({ from, to, text });
+    try {
+      const message = new ChatMessageModel({
+        from,
+        to,
+        text,
+        imageUrl,
+        createdAt: new Date(),
+      });
+
+      await message.save();
+
+      logger.info(
+        `Mensaje guardado: ${from} → ${to}${imageUrl ? ' (con imagen)' : ''}`,
+      );
+      return message;
+    } catch (error) {
+      logger.error(`Error al guardar mensaje: ${error}`);
+      throw error;
+    }
   }
 
-  async getEventChat(_eventId: string): Promise<IEventChatMessage[]> {
-    return [];
+  async getEventChat(eventId: string): Promise<IEventChatMessage[]> {
+    try {
+      const messages = await EventChatMessageModel.find({ eventId })
+        .sort({ createdAt: 1 })
+        .lean();
+
+      logger.info(`Chat del evento ${eventId}: ${messages.length} mensajes`);
+      return messages;
+    } catch (error) {
+      logger.error(`Error al obtener chat del evento: ${error}`);
+      return [];
+    }
   }
 
   async addEventChatMessage(
@@ -545,8 +681,266 @@ export class UserService {
     userId: string,
     username: string,
     text: string,
+    imageUrl?: string,
   ): Promise<IEventChatMessage> {
-    return new EventChatMessageModel({ eventId, userId, username, text });
+    try {
+      const message = new EventChatMessageModel({
+        eventId,
+        userId,
+        username,
+        text,
+        imageUrl,
+        createdAt: new Date(),
+      });
+
+      await message.save();
+
+      logger.info(
+        `Mensaje de evento guardado: ${username} en ${eventId}${imageUrl ? ' (con imagen)' : ''}`,
+      );
+      return message;
+    } catch (error) {
+      logger.error(`Error al guardar mensaje de evento: ${error}`);
+      logger.error(`Error al guardar mensaje de evento: ${error}`);
+      throw error;
+    }
+  }
+
+  async blockUser(userId: string, blockId: string) {
+    if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(blockId)) {
+      throw new Error('Invalid user id');
+    }
+    if (userId === blockId) throw new Error('No puedes bloquearte a ti mismo');
+
+    await this.unlinkFriendsBothWays(userId, blockId);
+
+    await Usuario.findByIdAndUpdate(userId, {
+      $addToSet: { blockedUsers: new Types.ObjectId(blockId) },
+    });
+
+    logger.info(`Usuario ${userId} bloqueó a ${blockId}`);
+    return { ok: true, message: 'Usuario bloqueado correctamente' };
+  }
+
+  async unblockUser(userId: string, unblockId: string) {
+    if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(unblockId)) {
+      throw new Error('Invalid user id');
+    }
+
+    await Usuario.findByIdAndUpdate(userId, {
+      $pull: { blockedUsers: new Types.ObjectId(unblockId) },
+    });
+
+    logger.info(`Usuario ${userId} desbloqueó a ${unblockId}`);
+    return { ok: true, message: 'Usuario desbloqueado correctamente' };
+  }
+
+  async getBlockedUsers(userId: string) {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID inválido');
+    }
+    const user = await Usuario.findById(userId).select('blockedUsers');
+    if (!user) throw new Error('Usuario no encontrado');
+
+    const blockedIds = user.blockedUsers || [];
+    const rawBlocked = await Usuario.find({ _id: { $in: blockedIds } })
+      .select('_id username gmail online profilePhoto')
+      .lean();
+
+    const data = rawBlocked.map((u: any) => ({
+      ...u,
+      profilePhoto: transformProfilePhotoUrl(u.profilePhoto),
+    }));
+
+    return data;
+  }
+
+  async deleteEventChatMessage(messageId: string, userId: string) {
+    try {
+      if (!Types.ObjectId.isValid(messageId)) {
+        return {
+          success: false,
+          status: 400,
+          message: 'ID de mensaje inválido',
+        };
+      }
+
+      const message = await EventChatMessageModel.findById(messageId);
+
+      if (!message) {
+        return {
+          success: false,
+          status: 404,
+          message: 'Mensaje no encontrado',
+        };
+      }
+
+      if (message.userId !== userId) {
+        return {
+          success: false,
+          status: 403,
+          message: 'No tienes permiso para eliminar este mensaje',
+        };
+      }
+
+      let deletedImage = false;
+      if (message.imageUrl) {
+        try {
+          const filename = message.imageUrl.split('/').pop();
+          if (filename) {
+            const filePath = path.join(
+              __dirname,
+              '..',
+              'public',
+              'uploads',
+              'event-chat',
+              filename,
+            );
+
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              deletedImage = true;
+              logger.info(`Imagen eliminada: ${filePath}`);
+            }
+          }
+        } catch (error) {
+          logger.error(`Error al eliminar imagen: ${error}`);
+        }
+      }
+
+      await EventChatMessageModel.findByIdAndDelete(messageId);
+
+      const eventRoomId = `event:${message.eventId}`;
+      io.to(eventRoomId).emit('eventChat:messageDeleted', {
+        messageId: messageId,
+        eventId: message.eventId,
+      });
+
+      logger.info(
+        `Mensaje eliminado: ${messageId} del evento ${message.eventId} por usuario ${userId}`,
+      );
+
+      return {
+        success: true,
+        message: 'Mensaje eliminado correctamente',
+        deletedImage,
+      };
+    } catch (error) {
+      logger.error(`Error en deleteEventChatMessage: ${error}`);
+      return {
+        success: false,
+        status: 500,
+        message: 'Error al eliminar el mensaje',
+      };
+    }
+  }
+
+  async addChatMessageWithImage(
+    from: string,
+    to: string,
+    text: string,
+    imageUrl?: string,
+  ): Promise<IChatMessage> {
+    try {
+      const message = new ChatMessageModel({
+        from,
+        to,
+        text,
+        imageUrl,
+        createdAt: new Date(),
+      });
+
+      await message.save();
+
+      logger.info(
+        `Mensaje guardado: ${from} → ${to}${imageUrl ? ' (con imagen)' : ''}`,
+      );
+      return message;
+    } catch (error) {
+      logger.error(`Error al guardar mensaje: ${error}`);
+      throw error;
+    }
+  }
+
+  async deleteChatMessage(messageId: string, userId: string) {
+    try {
+      if (!Types.ObjectId.isValid(messageId)) {
+        return {
+          success: false,
+          status: 400,
+          message: 'ID de mensaje inválido',
+        };
+      }
+
+      const message = await ChatMessageModel.findById(messageId);
+
+      if (!message) {
+        return {
+          success: false,
+          status: 404,
+          message: 'Mensaje no encontrado',
+        };
+      }
+
+      if (message.from !== userId) {
+        return {
+          success: false,
+          status: 403,
+          message: 'No tienes permiso para eliminar este mensaje',
+        };
+      }
+
+      let deletedImage = false;
+      if ((message as any).imageUrl) {
+        try {
+          const filename = (message as any).imageUrl.split('/').pop();
+          if (filename) {
+            const filePath = path.join(
+              __dirname,
+              '..',
+              'public',
+              'uploads',
+              'friend-chat',
+              filename,
+            );
+
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              deletedImage = true;
+              logger.info(`Imagen de chat eliminada: ${filePath}`);
+            }
+          }
+        } catch (error) {
+          logger.error(`Error al eliminar imagen de chat: ${error}`);
+        }
+      }
+
+      await ChatMessageModel.findByIdAndDelete(messageId);
+
+      const chatRoomId = [message.from, message.to].sort().join(':');
+      io.to(chatRoomId).emit('chat:messageDeleted', {
+        messageId: messageId,
+        from: message.from,
+        to: message.to,
+      });
+
+      logger.info(
+        `Mensaje de chat eliminado: ${messageId} por usuario ${userId}`,
+      );
+
+      return {
+        success: true,
+        message: 'Mensaje eliminado correctamente',
+        deletedImage,
+      };
+    } catch (error) {
+      logger.error(`Error en deleteChatMessage: ${error}`);
+      return {
+        success: false,
+        status: 500,
+        message: 'Error al eliminar el mensaje',
+      };
+    }
   }
 }
 

@@ -6,9 +6,9 @@ import { logger } from '../config/logger';
 
 export class ValoracionService {
   async createValoracion(
-    eventoId: string, 
+    eventoId: string,
     data: { puntuacion: number; comentario?: string },
-    usuarioId: string
+    usuarioId: string,
   ) {
     if (!usuarioId) {
       throw new Error('Usuario no autenticado');
@@ -18,11 +18,11 @@ export class ValoracionService {
       evento: new Types.ObjectId(eventoId),
       usuario: new Types.ObjectId(usuarioId),
       puntuacion: data.puntuacion,
-      comentario: data.comentario
+      comentario: data.comentario,
     });
 
     await this.recalcularAggregatesEvento(eventoId);
-    
+
     try {
       await gamificacionService.otorgarPuntos(usuarioId, 'dejarValoracion');
     } catch (err) {
@@ -34,12 +34,12 @@ export class ValoracionService {
 
   async updateValoracion(
     id: string,
-    data: { puntuacion?: number; comentario?: string }
+    data: { puntuacion?: number; comentario?: string },
   ): Promise<IValoracion | null> {
     const doc = await Valoracion.findByIdAndUpdate(
       id,
       { $set: data },
-      { new: true }
+      { new: true },
     ).exec();
     if (doc) await this.recalcularAggregatesEvento(String(doc.evento));
     return doc;
@@ -49,22 +49,27 @@ export class ValoracionService {
     return await Valoracion.findById(id).exec();
   }
 
-  async getUserValoracionForEvento(eventoId: string, usuarioId: string): Promise<IValoracion | null> {
+  async getUserValoracionForEvento(
+    eventoId: string,
+    usuarioId: string,
+  ): Promise<IValoracion | null> {
     return await Valoracion.findOne({
       evento: new Types.ObjectId(eventoId),
-      usuario: new Types.ObjectId(usuarioId)
+      usuario: new Types.ObjectId(usuarioId),
     }).exec();
   }
 
   async listByEvento(
     eventoId: string,
-    opts: { page?: number; limit?: number; q?: string }
+    opts: { page?: number; limit?: number; q?: string },
   ) {
     const page = Math.max(1, Number(opts.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(opts.limit) || 10));
     const skip = (page - 1) * limit;
 
-    const filtro: FilterQuery<IValoracion> = { evento: new Types.ObjectId(eventoId) };
+    const filtro: FilterQuery<IValoracion> = {
+      evento: new Types.ObjectId(eventoId),
+    };
     if (opts.q && opts.q.trim()) {
       const rx = new RegExp(opts.q.trim(), 'i');
       (filtro as any).comentario = rx;
@@ -77,14 +82,14 @@ export class ValoracionService {
         .limit(limit)
         .populate('usuario', 'username gmail')
         .exec(),
-      Valoracion.countDocuments(filtro).exec()
+      Valoracion.countDocuments(filtro).exec(),
     ]);
 
     return {
       data,
       page,
       totalPages: Math.ceil(total / limit) || 1,
-      totalItems: total
+      totalItems: total,
     };
   }
 
@@ -97,7 +102,13 @@ export class ValoracionService {
   async recalcularAggregatesEvento(eventoId: string) {
     const res = await Valoracion.aggregate([
       { $match: { evento: new Types.ObjectId(eventoId) } },
-      { $group: { _id: '$evento', avg: { $avg: '$puntuacion' }, count: { $sum: 1 } } }
+      {
+        $group: {
+          _id: '$evento',
+          avg: { $avg: '$puntuacion' },
+          count: { $sum: 1 },
+        },
+      },
     ]).exec();
 
     const avg = res[0]?.avg ?? 0;
@@ -106,7 +117,7 @@ export class ValoracionService {
     await Evento.findByIdAndUpdate(
       eventoId,
       { $set: { avgRating: avg, ratingsCount: count } },
-      { new: false }
+      { new: false },
     ).exec();
   }
 }

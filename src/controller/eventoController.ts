@@ -1,9 +1,13 @@
 import { Request, Response } from 'express';
 import { EventoService } from '../services/eventoServices';
+import { Evento, EventoPhoto } from '../models/evento';
 import { Usuario } from '../models/usuario';
-import { Evento } from '../models/evento';
 import { logger } from '../config/logger';
 import { Types } from 'mongoose';
+import notificacionService from '../services/notificacionServices';
+import fs from 'fs';
+import path from 'path';
+import { verifyToken } from '../auth/token';
 
 const eventoService = new EventoService();
 
@@ -50,6 +54,15 @@ export async function createEvento(
       return res.status(401).json({ message: 'No autenticado' });
     }
 
+    if (isPrivate && (!Array.isArray(invitados) || invitados.length === 0)) {
+      logger.warn(
+        `Usuario ${creadorId} intentó crear evento privado sin invitados`,
+      );
+      return res.status(400).json({
+        message: 'Un evento privado debe tener al menos un invitado',
+      });
+    }
+
     const scheduleStr = normalizeSchedule(schedule);
     const participantesIdsRaw = normalizeParticipantes(req.body);
 
@@ -88,7 +101,6 @@ export async function createEvento(
       invitacionesPendientesIds = invitados.map((id: string) => id.toString());
     }
 
-    // Procesar maxParticipantes
     let maxParticipantesNum: number | null = null;
     if (
       maxParticipantes !== undefined &&
@@ -98,6 +110,18 @@ export async function createEvento(
       const parsed = parseInt(String(maxParticipantes), 10);
       if (!Number.isNaN(parsed) && parsed > 0) {
         maxParticipantesNum = parsed;
+      }
+    }
+
+    if (isPrivate && maxParticipantesNum !== null) {
+      const totalInvitadosConCreador = invitacionesPendientesIds.length + 1;
+      if (maxParticipantesNum < totalInvitadosConCreador) {
+        logger.warn(
+          `Usuario ${creadorId} intentó crear evento con límite ${maxParticipantesNum} pero tiene ${totalInvitadosConCreador} invitados (incluyendo creador)`,
+        );
+        return res.status(400).json({
+          message: `El límite de participantes (${maxParticipantesNum}) debe ser mayor o igual al número de invitados más el creador (${totalInvitadosConCreador})`,
+        });
       }
     }
 
@@ -131,8 +155,43 @@ export async function createEvento(
       .exec();
 
     logger.info(
-      `Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, maxParticipantes: ${maxParticipantesNum}`,
+      `✅ Evento creado con ID: ${created._id} por usuario ${creadorId}, privado: ${isPrivate}, maxParticipantes: ${maxParticipantesNum}, invitados: ${invitacionesPendientesIds.length}`,
     );
+
+    if (isPrivate && invitacionesPendientesIds.length > 0) {
+      const creadorUser = await Usuario.findById(creadorId).select('username');
+      const creadorUsername = creadorUser?.username || 'Usuario';
+
+      for (const userId of invitacionesPendientesIds) {
+        try {
+          const { io } = await import('../index');
+          io.to(`user:${userId}`).emit('eventInvitation:received', {
+            fromUserId: creadorId,
+            fromUsername: creadorUsername,
+            eventId: created._id.toString(),
+            eventName: name,
+          });
+
+          logger.info(
+            `🔔 Evento eventInvitation:received enviado a user:${userId}`,
+          );
+
+          await notificacionService.notifyEventInvitation(
+            userId,
+            creadorId,
+            creadorUsername,
+            created._id.toString(),
+            name,
+          );
+
+          logger.info(
+            `📧 Notificación persistente creada para usuario ${userId}`,
+          );
+        } catch (err) {
+          logger.error(`Error enviando notificación a ${userId}: ${err}`);
+        }
+      }
+    }
 
     return res.status(201).json(populated ?? created);
   } catch (error) {
@@ -236,8 +295,9 @@ export async function createEventoFromPanel(req: Request, res: Response) {
     return res.status(201).json(evento);
   } catch (err: any) {
     logger.error(`Error al crear evento desde panel: ${err?.message || err}`);
-    logger.error({ error: err }, 'Error en createEventoFromPanel');
-    return res.status(500).json({ message: err?.message || 'No se pudo crear el evento (panel).' });
+    return res
+      .status(500)
+      .json({ message: err?.message || 'No se pudo crear el evento (panel).' });
   }
 }
 
@@ -792,6 +852,7 @@ export async function inviteUsersToPrivateEvent(
     const eventoActualizado = await eventoService.inviteUsersToEvent(
       eventoId,
       userIds,
+      userId,
     );
 
     return res.status(200).json({
@@ -800,12 +861,10 @@ export async function inviteUsersToPrivateEvent(
     });
   } catch (error) {
     logger.error(`Error invitando usuarios: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error invitando usuarios',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error invitando usuarios',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -848,12 +907,10 @@ export async function acceptPrivateEventInvitation(
     });
   } catch (error) {
     logger.error(`Error aceptando invitación: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error aceptando invitación',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error aceptando invitación',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -894,12 +951,10 @@ export async function rejectPrivateEventInvitation(
     });
   } catch (error) {
     logger.error(`Error rechazando invitación: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error rechazando invitación',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error rechazando invitación',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -922,12 +977,10 @@ export async function getMyPendingInvitations(
     });
   } catch (error) {
     logger.error(`Error obteniendo invitaciones: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error obteniendo invitaciones',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error obteniendo invitaciones',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -972,12 +1025,10 @@ export async function removeInvitedUserFromEvent(
     });
   } catch (error) {
     logger.error(`Error eliminando invitado: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error eliminando invitado',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error eliminando invitado',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -1011,12 +1062,10 @@ export async function getEventosVisibles(
     return res.status(200).json(result);
   } catch (error) {
     logger.error(`Error obteniendo eventos visibles: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message: 'Error obteniendo eventos visibles',
-        error: (error as Error).message,
-      });
+    return res.status(500).json({
+      message: 'Error obteniendo eventos visibles',
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -1050,11 +1099,485 @@ export async function getCalendarEvents(
     return res.status(200).json(eventos);
   } catch (error) {
     logger.error(`Error obteniendo eventos de calendario: ${error}`);
+    return res.status(500).json({
+      message: 'Error obteniendo eventos de calendario',
+      error: (error as Error).message,
+    });
+  }
+}
+
+const INTEREST_TO_CATEGORIES: Record<string, string[]> = {
+  Deportes: [
+    'Fútbol',
+    'Baloncesto',
+    'Tenis',
+    'Pádel',
+    'Running',
+    'Ciclismo',
+    'Natación',
+    'Yoga',
+    'Gimnasio',
+    'Senderismo',
+  ],
+  Música: [
+    'Concierto Rock',
+    'Concierto Pop',
+    'Concierto Clásica',
+    'Jazz',
+    'Electrónica',
+    'Hip Hop',
+    'Karaoke',
+    'Festival Musical',
+    'Discoteca',
+  ],
+  Tecnología: [
+    'Gaming',
+    'eSports',
+    'Programación',
+    'Inteligencia Artificial',
+    'Blockchain',
+    'Startups',
+    'Hackathon',
+    'Meetup Tech',
+  ],
+  Gastronomía: [
+    'Restaurante',
+    'Tapas',
+    'Cocina Internacional',
+    'Vinos',
+    'Cerveza Artesanal',
+    'Repostería',
+    'Brunch',
+    'Food Truck',
+  ],
+  Cultura: [
+    'Exposición Arte',
+    'Teatro',
+    'Cine',
+    'Museo',
+    'Literatura',
+    'Fotografía',
+    'Pintura',
+    'Danza',
+  ],
+  Social: [
+    'Discoteca',
+    'After Work',
+    'Networking',
+    'Speed Dating',
+    'Fiesta Temática',
+    'Cumpleaños',
+    'Fiesta Privada',
+  ],
+  Salud: ['Meditación', 'Spa', 'Wellness', 'Mindfulness', 'Salud Mental'],
+  'Aire Libre': ['Camping', 'Montañismo', 'Playa', 'Barbacoa', 'Picnic'],
+};
+
+export async function getRecommendedEventos(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = (req as any).user?.id;
+    logger.info(`[getRecommendedEventos] INICIO - userId: ${userId}`);
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    const user = await Usuario.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    if (!user.interests || user.interests.length === 0) {
+      return res
+        .status(200)
+        .json({ data: [], message: 'No tienes intereses definidos' });
+    }
+
+    logger.info(
+      `[getRecommendedEventos] User ${userId} interests: ${user.interests}`,
+    );
+
+    const expandedCategories = new Set<string>();
+    user.interests.forEach((interest) => {
+      expandedCategories.add(interest);
+      const subCategories = INTEREST_TO_CATEGORIES[interest];
+      if (subCategories) {
+        subCategories.forEach((cat) => expandedCategories.add(cat));
+      }
+    });
+
+    logger.info(
+      `[getRecommendedEventos] Expanded categories: ${Array.from(expandedCategories)}`,
+    );
+
+    const now = new Date();
+    const filter: any = {
+      schedule: { $gte: now },
+      categoria: { $in: Array.from(expandedCategories) },
+      isPrivate: false,
+    };
+
+    const userObjectId = new Types.ObjectId(userId);
+    filter.participantes = { $ne: userObjectId };
+
+    logger.info(
+      `[getRecommendedEventos] Filter built: ${JSON.stringify(filter)}`,
+    );
+
+    const total = await Evento.countDocuments(filter);
+    logger.info(`[getRecommendedEventos] Total found: ${total}`);
+    const eventos = await Evento.find(filter)
+      .sort({ schedule: 1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('participantes', 'username gmail')
+      .populate('creador', 'username gmail');
+
+    logger.info(
+      `[getRecommendedEventos] Found ${eventos.length} events out of ${total} total`,
+    );
+
+    return res.status(200).json({
+      data: eventos,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    logger.error(`Error obteniendo recomendaciones: ${error}`);
     return res
       .status(500)
-      .json({
-        message: 'Error obteniendo eventos de calendario',
-        error: (error as Error).message,
+      .json({ message: 'Error obteniendo recomendaciones' });
+  }
+}
+
+export async function uploadEventoPhoto(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { id: eventId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No se ha subido ninguna foto' });
+    }
+
+    if (!userId) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const user = await Usuario.findById(userId);
+    if (!user) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+    const username = user.username;
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId,
+    );
+    const isCreator = evento.creador.toString() === userId;
+
+    if (!isParticipant && !isCreator) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(403).json({
+        message:
+          'No tienes permiso para subir contenido multimedia a este evento',
       });
+    }
+
+    const isVideo = req.file.mimetype.startsWith('video/');
+    const type = isVideo ? 'video' : 'image';
+
+    const photoUrl = `/api/event/${eventId}/photo/${req.file.filename}`;
+    const newMedia = new EventoPhoto({
+      eventId: new Types.ObjectId(eventId),
+      userId: new Types.ObjectId(userId),
+      username,
+      url: photoUrl,
+      type,
+    });
+
+    await newMedia.save();
+
+    logger.info(
+      `📷 ${
+        isVideo ? 'Video' : 'Foto'
+      } subida al evento ${eventId} por ${username}`,
+    );
+    return res.status(201).json(newMedia);
+  } catch (error) {
+    logger.error(`Error subiendo contenido al evento: ${error}`);
+    if (req.file) fs.unlinkSync(req.file.path);
+    return res.status(500).json({ message: 'Error subiendo contenido' });
+  }
+}
+
+export async function getEventoPhotos(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { id: eventId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId,
+    );
+    const isCreator = evento.creador.toString() === userId;
+
+    if (!isParticipant && !isCreator && evento.isPrivate) {
+      return res.status(403).json({
+        message: 'No tienes permiso para ver las fotos de este evento privado',
+      });
+    }
+
+    const photos = await EventoPhoto.find({ eventId }).sort({ createdAt: -1 });
+    const mappedPhotos = photos.map((p) => {
+      const obj = p.toObject();
+      if (obj.url.startsWith('/uploads/event-photos/')) {
+        const filename = path.basename(obj.url);
+        obj.url = `/api/event/${eventId}/photo/${filename}`;
+      }
+      return obj;
+    });
+    return res.status(200).json(mappedPhotos);
+  } catch (error) {
+    logger.error(`Error obteniendo fotos del evento: ${error}`);
+    return res.status(500).json({ message: 'Error obteniendo fotos' });
+  }
+}
+
+export async function getSecureEventoPhoto(
+  req: Request,
+  res: Response,
+): Promise<void | Response> {
+  try {
+    const { id: eventId, filename } = req.params;
+    let userId = (req as any).user?.id;
+
+    if (!userId && req.query.token) {
+      const decoded = verifyToken(req.query.token as string);
+      if (decoded && (decoded as any).payload?.id) {
+        userId = (decoded as any).payload.id;
+      }
+    }
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId,
+    );
+    const isCreator = evento.creador.toString() === userId;
+
+    if (!isParticipant && !isCreator) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permiso para ver esta foto' });
+    }
+
+    const filePath = path.join(
+      __dirname,
+      '..',
+      'public',
+      'uploads',
+      'event-photos',
+      filename,
+    );
+
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    } else {
+      return res.status(404).json({ message: 'Archivo no encontrado' });
+    }
+  } catch (error) {
+    logger.error(`Error sirviendo foto segura: ${error}`);
+    return res.status(500).json({ message: 'Error al obtener la foto' });
+  }
+}
+
+export async function deleteEventoPhoto(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { id: eventId, photoId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Usuario no autenticado' });
+    }
+
+    const photo = await EventoPhoto.findById(photoId);
+    if (!photo) {
+      return res.status(404).json({ message: 'Foto no encontrada' });
+    }
+
+    const evento = await Evento.findById(eventId);
+    if (!evento) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isPhotoOwner = photo.userId.toString() === userId;
+    const isEventCreator = evento.creador.toString() === userId;
+
+    if (!isPhotoOwner && !isEventCreator) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para eliminar esta foto' });
+    }
+
+    const fileName = path.basename(photo.url);
+    const filePath = path.join(
+      __dirname,
+      '..',
+      'public',
+      'uploads',
+      'event-photos',
+      fileName,
+    );
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      logger.info(`🗑️ Archivo físico eliminado: ${fileName}`);
+    }
+
+    await EventoPhoto.deleteOne({ _id: photoId });
+
+    logger.info(
+      `✅ Foto ${photoId} eliminada del evento ${eventId} por usuario ${userId}`,
+    );
+    return res.status(200).json({ message: 'Foto eliminada correctamente' });
+  } catch (error) {
+    logger.error(`Error al eliminar foto: ${error}`);
+    return res.status(500).json({ message: 'Error al eliminar la foto' });
+  }
+}
+
+export async function cleanupOldEventPhotos() {
+  try {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const oldPhotos = await EventoPhoto.find({
+      createdAt: { $lt: oneWeekAgo },
+    });
+
+    logger.info(
+      `Iniciando limpieza de ${oldPhotos.length} archivos multimedia antiguos`,
+    );
+
+    for (const photo of oldPhotos) {
+      const fileName = path.basename(photo.url);
+      const filePath = path.join(
+        __dirname,
+        '..',
+        'public',
+        'uploads',
+        'event-photos',
+        fileName,
+      );
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      await EventoPhoto.deleteOne({ _id: photo._id });
+    }
+
+    if (oldPhotos.length > 0) {
+      logger.info(
+        `✅ Se han eliminado ${oldPhotos.length} archivos multimedia con más de 1 semana`,
+      );
+    }
+  } catch (error) {
+    logger.error(`❌ Error en cleanupOldEventPhotos: ${error}`);
+  }
+}
+export async function uploadEventChatImage(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const eventoId = req.params.id;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      logger.warn('Usuario no autenticado al subir imagen de chat');
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!req.file) {
+      logger.warn('No se envió ningún archivo');
+      return res.status(400).json({ message: 'No se envió ningún archivo' });
+    }
+
+    const evento = await Evento.findById(eventoId);
+    if (!evento) {
+      logger.warn(`Evento ${eventoId} no encontrado`);
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+
+    const isParticipant = evento.participantes.some(
+      (p) => p.toString() === userId.toString(),
+    );
+
+    if (!isParticipant && evento.creador.toString() !== userId.toString()) {
+      logger.warn(
+        `Usuario ${userId} no es participante del evento ${eventoId}`,
+      );
+      return res.status(403).json({
+        message: 'Solo los participantes pueden enviar imágenes al chat',
+      });
+    }
+
+    const imageUrl = `/uploads/event-chat/${req.file.filename}`;
+
+    logger.info(
+      `✅ Imagen subida al chat del evento ${eventoId} por usuario ${userId}: ${imageUrl}`,
+    );
+
+    return res.status(200).json({
+      message: 'Imagen subida correctamente',
+      imageUrl,
+    });
+  } catch (error) {
+    logger.error(`Error al subir imagen de chat: ${error}`);
+    return res.status(500).json({
+      message: 'Error al subir la imagen',
+      error: String(error),
+    });
   }
 }

@@ -3,8 +3,16 @@ import { UsuarioProgreso, IUsuarioProgreso } from '../models/usuarioProgreso';
 import { Insignia, IInsignia } from '../models/insignia';
 import { logger } from '../config/logger';
 
+export interface RewardData {
+  puntosGanados: number;
+  accion: 'crearEvento' | 'unirseEvento' | 'hacerAmigo' | 'dejarValoracion';
+  insigniasDesbloqueadas: IInsignia[];
+  nivelAnterior: string;
+  nivelNuevo: string;
+  subisteDeNivel: boolean;
+}
+
 export class GamificacionService {
-  // Definición de niveles
   private nivelesConfig = [
     { nombre: 'Novato', puntosMin: 0, puntosMax: 99 },
     { nombre: 'Explorador', puntosMin: 100, puntosMax: 299 },
@@ -13,7 +21,6 @@ export class GamificacionService {
     { nombre: 'Leyenda', puntosMin: 1000, puntosMax: Infinity },
   ];
 
-  // Puntos por acción
   private puntosAcciones = {
     crearEvento: 50,
     unirseEvento: 10,
@@ -22,9 +29,6 @@ export class GamificacionService {
     hacerAmigo: 5,
   };
 
-  /**
-   * Obtener o crear el progreso de un usuario
-   */
   async obtenerProgreso(usuarioId: string): Promise<IUsuarioProgreso> {
     let progreso = await UsuarioProgreso.findOne({ usuario: usuarioId })
       .populate('insignias')
@@ -49,10 +53,7 @@ export class GamificacionService {
     return progreso;
   }
 
-  /**
-   * Otorgar puntos por una acción específica
-   */
-  async otorgarPuntos(
+  async otorgarPuntosConRecompensa(
     usuarioId: string,
     accion:
       | 'crearEvento'
@@ -60,14 +61,13 @@ export class GamificacionService {
       | 'asistirEvento'
       | 'dejarValoracion'
       | 'hacerAmigo',
-  ): Promise<IUsuarioProgreso> {
+  ): Promise<RewardData> {
     const puntos = this.puntosAcciones[accion] || 0;
     const progreso = await this.obtenerProgreso(usuarioId);
 
-    // Actualizar puntos
+    const nivelAnterior = progreso.nivel;
     progreso.puntos += puntos;
 
-    // Actualizar estadísticas según la acción
     switch (accion) {
       case 'crearEvento':
         progreso.estadisticas.eventosCreadosTotal += 1;
@@ -83,12 +83,61 @@ export class GamificacionService {
         break;
     }
 
-    // Recalcular nivel
-    progreso.nivel = this.calcularNivel(progreso.puntos);
+    const nivelNuevo = this.calcularNivel(progreso.puntos);
+    progreso.nivel = nivelNuevo;
+
+    const subisteDeNivel = nivelAnterior !== nivelNuevo;
 
     await progreso.save();
 
-    // Verificar si desbloqueó nuevas insignias
+    const insigniasDesbloqueadas =
+      await this.verificarInsigniasConRetorno(usuarioId);
+
+    logger.info(
+      `Usuario ${usuarioId} recibió ${puntos} puntos por ${accion}. Total: ${progreso.puntos}. Nivel: ${nivelAnterior} -> ${nivelNuevo}`,
+    );
+
+    return {
+      puntosGanados: puntos,
+      accion: accion === 'asistirEvento' ? 'unirseEvento' : (accion as any),
+      insigniasDesbloqueadas,
+      nivelAnterior,
+      nivelNuevo,
+      subisteDeNivel,
+    };
+  }
+
+  async otorgarPuntos(
+    usuarioId: string,
+    accion:
+      | 'crearEvento'
+      | 'unirseEvento'
+      | 'asistirEvento'
+      | 'dejarValoracion'
+      | 'hacerAmigo',
+  ): Promise<IUsuarioProgreso> {
+    const puntos = this.puntosAcciones[accion] || 0;
+    const progreso = await this.obtenerProgreso(usuarioId);
+
+    progreso.puntos += puntos;
+
+    switch (accion) {
+      case 'crearEvento':
+        progreso.estadisticas.eventosCreadosTotal += 1;
+        break;
+      case 'unirseEvento':
+        progreso.estadisticas.eventosUnidosTotal += 1;
+        break;
+      case 'dejarValoracion':
+        progreso.estadisticas.valoracionesTotal += 1;
+        break;
+      case 'hacerAmigo':
+        progreso.estadisticas.amigosTotal += 1;
+        break;
+    }
+    progreso.nivel = this.calcularNivel(progreso.puntos);
+
+    await progreso.save();
     await this.verificarInsignias(usuarioId);
 
     logger.info(
@@ -98,9 +147,6 @@ export class GamificacionService {
     return progreso;
   }
 
-  /**
-   * Calcular el nivel según los puntos
-   */
   private calcularNivel(puntos: number): string {
     const nivel = this.nivelesConfig.find(
       (n) => puntos >= n.puntosMin && puntos <= n.puntosMax,
@@ -108,43 +154,37 @@ export class GamificacionService {
     return nivel ? nivel.nombre : 'Novato';
   }
 
-  /**
-   * Verificar si el usuario cumple criterios para nuevas insignias
-   */
-  async verificarInsignias(usuarioId: string): Promise<void> {
-    // Obtener progreso fresco desde la BD para evitar datos stale
+  private async verificarInsigniasConRetorno(
+    usuarioId: string,
+  ): Promise<IInsignia[]> {
     const progreso = await UsuarioProgreso.findOne({ usuario: usuarioId })
       .populate('insignias')
       .exec();
 
     if (!progreso) {
       logger.warn(`No se encontró progreso para usuario ${usuarioId}`);
-      return;
+      return [];
     }
 
     const todasInsignias = await Insignia.find().exec();
-
-    // Convertir a Set para búsqueda O(1) y evitar duplicados
     const insigniasActualesIds = new Set(
       progreso.insignias.map((i: Types.ObjectId | IInsignia) => {
-        // Manejar tanto ObjectIds como objetos poblados
         return (typeof i === 'object' && '_id' in i ? i._id : i).toString();
       }),
     );
 
+    const insigniasDesbloqueadas: IInsignia[] = [];
+
     for (const insignia of todasInsignias) {
       const insigniaIdStr = insignia._id.toString();
 
-      // Si ya tiene esta insignia, continuar
       if (insigniasActualesIds.has(insigniaIdStr)) {
         continue;
       }
 
-      // Verificar criterios
       const cumple = this.cumpleCriterios(progreso, insignia);
 
       if (cumple) {
-        // Verificar una vez más antes de otorgar (por si acaso hubo concurrencia)
         const progresoActualizado = await UsuarioProgreso.findById(
           progreso._id,
         );
@@ -155,7 +195,64 @@ export class GamificacionService {
         );
 
         if (!yaLaTiene) {
-          // Otorgar insignia usando operador atómico $addToSet para evitar duplicados
+          await UsuarioProgreso.findByIdAndUpdate(
+            progreso._id,
+            {
+              $addToSet: { insignias: insignia._id },
+              $inc: { puntos: insignia.puntos },
+            },
+            { new: true },
+          );
+
+          insigniasDesbloqueadas.push(insignia);
+
+          logger.info(
+            `Usuario ${usuarioId} desbloqueó insignia: ${insignia.nombre} (+${insignia.puntos} puntos)`,
+          );
+        }
+      }
+    }
+
+    return insigniasDesbloqueadas;
+  }
+
+  async verificarInsignias(usuarioId: string): Promise<void> {
+    const progreso = await UsuarioProgreso.findOne({ usuario: usuarioId })
+      .populate('insignias')
+      .exec();
+
+    if (!progreso) {
+      logger.warn(`No se encontró progreso para usuario ${usuarioId}`);
+      return;
+    }
+
+    const todasInsignias = await Insignia.find().exec();
+    const insigniasActualesIds = new Set(
+      progreso.insignias.map((i: Types.ObjectId | IInsignia) => {
+        return (typeof i === 'object' && '_id' in i ? i._id : i).toString();
+      }),
+    );
+
+    for (const insignia of todasInsignias) {
+      const insigniaIdStr = insignia._id.toString();
+
+      if (insigniasActualesIds.has(insigniaIdStr)) {
+        continue;
+      }
+
+      const cumple = this.cumpleCriterios(progreso, insignia);
+
+      if (cumple) {
+        const progresoActualizado = await UsuarioProgreso.findById(
+          progreso._id,
+        );
+        if (!progresoActualizado) continue;
+
+        const yaLaTiene = progresoActualizado.insignias.some(
+          (i: Types.ObjectId | IInsignia) => i.toString() === insigniaIdStr,
+        );
+
+        if (!yaLaTiene) {
           await UsuarioProgreso.findByIdAndUpdate(
             progreso._id,
             {
@@ -173,9 +270,6 @@ export class GamificacionService {
     }
   }
 
-  /**
-   * Verificar si el progreso cumple los criterios de una insignia
-   */
   private cumpleCriterios(
     progreso: IUsuarioProgreso,
     insignia: IInsignia,
@@ -218,9 +312,6 @@ export class GamificacionService {
     return true;
   }
 
-  /**
-   * Obtener el ranking de usuarios (leaderboard)
-   */
   async obtenerRanking(limite: number = 10): Promise<any[]> {
     const ranking = await UsuarioProgreso.find()
       .sort({ puntos: -1 })
@@ -239,16 +330,10 @@ export class GamificacionService {
     }));
   }
 
-  /**
-   * Obtener todas las insignias disponibles
-   */
   async obtenerTodasInsignias(): Promise<IInsignia[]> {
     return await Insignia.find().exec();
   }
 
-  /**
-   * Inicializar insignias predefinidas (seed)
-   */
   async inicializarInsignias(): Promise<void> {
     const count = await Insignia.countDocuments().exec();
     if (count > 0) {

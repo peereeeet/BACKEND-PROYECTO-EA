@@ -7,6 +7,8 @@ import { generateToken, generateRefreshToken } from '../auth/token';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import { OAuth2Client } from 'google-auth-library';
+import path from 'path';
+import fs from 'fs';
 
 const userService = new UserService();
 const Evento = mongoose.model('Evento');
@@ -18,17 +20,21 @@ export async function createUser(
 ): Promise<Response> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    logger.error(`Errores de validación al crear usuario:${errors.array()}`);
+    logger.error(
+      `Errores de validación al crear usuario: ${JSON.stringify(errors.array())}`,
+    );
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { username, gmail, password, birthday, rol } = req.body as IUsuario;
+    const { username, gmail, password, birthday, rol, interests } =
+      req.body as IUsuario;
     const newUser: Partial<IUsuario> = {
       username,
       gmail,
       password,
       birthday,
       rol: rol || 'usuario',
+      interests: interests || [],
     };
     const user = await userService.createUser(newUser);
     logger.info(`Usuario creado: ${user!.username}`);
@@ -48,6 +54,13 @@ export const deleteWithPassword = async (req: Request, res: Response) => {
     if (!user) {
       logger.warn(`Intento de eliminación de usuario inexistente. ID: ${id}`);
       return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    if (user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '..', 'public', user.profilePhoto);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
 
     if (user.isGoogleUser) {
@@ -88,7 +101,7 @@ export async function checkUserExistsForReset(req: Request, res: Response) {
       return res.status(400).json({ message: 'Falta email o usuario.' });
     }
 
-    const user = await userService.findUserByEmailOrUsername(emailOrUsername); // { _id, username, gmail } | null
+    const user = await userService.findUserByEmailOrUsername(emailOrUsername);
     if (!user) return res.json({ exists: false });
 
     return res.json({
@@ -112,12 +125,14 @@ export async function directResetPassword(req: Request, res: Response) {
     }
     await userService.setPasswordByUserId(userId, newPassword);
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res
-      .status(400)
-      .json({
-        message: err?.message || 'No se pudo actualizar la contraseña.',
-      });
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error
+        ? err.message
+        : 'No se pudo actualizar la contraseña.';
+    return res.status(400).json({
+      message: errorMessage,
+    });
   }
 }
 
@@ -176,6 +191,40 @@ export const getAllUsers = async (
   } catch (error) {
     logger.error(`Error al obtener usuarios: ${error}`);
     res.status(500).json({ message: 'Error al obtener usuarios', error });
+  }
+};
+
+export const getVisibleUsers = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const authId = (req as any)?.user?.id || (req as any)?.user?.payload?.id;
+
+    if (!authId) {
+      logger.warn(
+        'No se proporcionó ID de usuario autenticado en getVisibleUsers',
+      );
+      res.status(401).json({ message: 'No autenticado' });
+      return;
+    }
+
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(
+      1,
+      Math.min(50, parseInt(req.query.limit as string) || 10),
+    );
+
+    const result = await userService.getVisibleUsers(authId, page, limit);
+    logger.info(
+      `Usuarios visibles obtenidos para usuario ${authId}: ${result.totalItems} usuarios encontrados en total, pagina ${page}`,
+    );
+    res.status(200).json(result);
+  } catch (error) {
+    logger.error(`Error al obtener usuarios visibles: ${error}`);
+    res
+      .status(500)
+      .json({ message: 'Error al obtener usuarios visibles', error });
   }
 };
 
@@ -240,7 +289,7 @@ export async function updateOwnProfile(
   res: Response,
 ): Promise<Response> {
   try {
-    const authId = (req as any)?.user?.payload?.id;
+    const authId = (req as any)?.user?.id || (req as any)?.user?.payload?.id;
     const { id } = req.params;
 
     if (!authId || authId !== id) {
@@ -256,8 +305,8 @@ export async function updateOwnProfile(
       return res.status(400).json({ error: 'ID invalido' });
     }
 
-    const { username, gmail, password, birthday } =
-      req.body as Partial<IUsuario>;
+    const { username, gmail, password, birthday, interests } =
+      req.body as Partial<IUsuario & { interests?: string[] }>;
 
     const user = await Usuario.findById(id);
     if (!user) {
@@ -269,6 +318,7 @@ export async function updateOwnProfile(
     if (typeof gmail === 'string') user.gmail = gmail;
     if (birthday !== undefined)
       user.birthday = new Date(String(birthday)) as any;
+    if (Array.isArray(interests)) user.interests = interests;
     if (typeof password === 'string' && password.trim() !== '') {
       user.password = password;
     }
@@ -312,12 +362,134 @@ export async function updateUserById(
   }
 }
 
+export async function uploadProfilePhoto(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const authId = (req as any)?.user?.id;
+    const { id } = req.params;
+
+    if (!authId || authId !== id) {
+      logger.warn(
+        `Intento no autorizado de subir foto: authId=${authId}, targetId=${id}`,
+      );
+      return res
+        .status(403)
+        .json({ error: 'Solo puedes modificar tu propio perfil' });
+    }
+
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ error: 'No se proporcionó ningún archivo' });
+    }
+
+    const user = await Usuario.findById(id);
+    if (!user) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
+      const oldFilePath = path.join(
+        __dirname,
+        '..',
+        'public',
+        user.profilePhoto,
+      );
+      if (fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath);
+      }
+    }
+
+    const photoUrl = `/uploads/profile-photos/${req.file.filename}`;
+    user.profilePhoto = photoUrl;
+    await user.save();
+
+    logger.info(`Foto de perfil actualizada para usuario ${id}`);
+    return res.status(200).json({
+      ok: true,
+      profilePhoto: photoUrl,
+      user: {
+        _id: user._id,
+        username: user.username,
+        gmail: user.gmail,
+        profilePhoto: user.profilePhoto,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error al subir foto de perfil: ${error}`);
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    return res.status(500).json({ error: 'Error al subir la foto de perfil' });
+  }
+}
+
+export async function deleteProfilePhoto(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const authId = (req as any)?.user?.id;
+    const { id } = req.params;
+
+    if (!authId || authId !== id) {
+      logger.warn(
+        `Intento no autorizado de eliminar foto: authId=${authId}, targetId=${id}`,
+      );
+      return res
+        .status(403)
+        .json({ error: 'Solo puedes modificar tu propio perfil' });
+    }
+
+    const user = await Usuario.findById(id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (user.profilePhoto && user.profilePhoto.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '..', 'public', user.profilePhoto);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    user.profilePhoto = undefined;
+    await user.save();
+
+    logger.info(`Foto de perfil eliminada para usuario ${id}`);
+    return res.status(200).json({
+      ok: true,
+      message: 'Foto de perfil eliminada correctamente',
+    });
+  } catch (error) {
+    logger.error(`Error al eliminar foto de perfil: ${error}`);
+    return res
+      .status(500)
+      .json({ error: 'Error al eliminar la foto de perfil' });
+  }
+}
+
 export async function deleteUserById(
   req: Request,
   res: Response,
 ): Promise<Response> {
   try {
     const { id } = req.params;
+    const user = await Usuario.findById(id);
+    if (
+      user &&
+      user.profilePhoto &&
+      user.profilePhoto.startsWith('/uploads/')
+    ) {
+      const filePath = path.join(__dirname, '..', 'public', user.profilePhoto);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
     const deletedUser = await userService.deleteUserById(id);
     if (!deletedUser) {
       logger.warn(`Usuario no encontrado en deleteUserById con ID: ${id}`);
@@ -390,12 +562,16 @@ export async function loginUser(
       });
     }
 
-    if (!user.isActive) {
+    if (user.accountStatus === 'PENDING_EMAIL') {
+      return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED' });
+    }
+
+    if (!user.isActive || user.accountStatus === 'DISABLED') {
       return res.status(403).json({ message: 'USER_DISABLED' });
     }
 
-    const token = await generateToken(user!, res);
-    const refreshToken = await generateRefreshToken(user!, res);
+    const token = generateToken(user!);
+    const refreshToken = generateRefreshToken(user!);
 
     logger.info(`Usuario logueado exitosamente: ${username}`);
     return res.status(200).json({
@@ -410,9 +586,54 @@ export async function loginUser(
   }
 }
 
+export async function checkGoogleUser(req: Request, res: Response) {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ message: 'Falta el token de Google' });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(400).json({ message: 'Token de Google no válido' });
+    }
+
+    const gmail = payload.email;
+    const user = await Usuario.findOne({ gmail });
+
+    if (user) {
+      return res.status(200).json({
+        exists: true,
+        needsData: !user.birthday,
+        hasUsername: !!user.username,
+        hasBirthday: !!user.birthday,
+      });
+    } else {
+      const suggestedName =
+        payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
+      return res.status(200).json({
+        exists: false,
+        needsData: true,
+        suggestedUsername: suggestedName,
+      });
+    }
+  } catch (error) {
+    logger.error(`Error en checkGoogleUser: ${error}`);
+    return res
+      .status(500)
+      .json({ message: 'Error al verificar usuario de Google' });
+  }
+}
+
 export async function loginWithGoogle(req: Request, res: Response) {
   try {
-    const { credential, birthday } = req.body;
+    const { credential, birthday, username, interests } = req.body;
 
     if (!credential) {
       return res.status(400).json({ message: 'Falta el token de Google' });
@@ -430,7 +651,8 @@ export async function loginWithGoogle(req: Request, res: Response) {
 
     const gmail = payload.email;
     const googleId = payload.sub || null;
-    const name =
+
+    const suggestedName =
       payload.name || (gmail.includes('@') ? gmail.split('@')[0] : gmail);
 
     let birthdayDate: Date | undefined = undefined;
@@ -441,29 +663,37 @@ export async function loginWithGoogle(req: Request, res: Response) {
       }
     }
 
-    if (!birthdayDate) {
-      const rawBirth = (payload as any).birthdate || (payload as any).birthday;
-      if (rawBirth) {
-        const parsed = new Date(rawBirth as string);
-        if (!Number.isNaN(parsed.getTime())) {
-          birthdayDate = parsed;
-        }
-      }
-    }
+    const userInterests: string[] = Array.isArray(interests) ? interests : [];
 
     let user = await Usuario.findOne({ gmail });
 
     if (!user) {
+      const finalUsername = username?.trim() || suggestedName;
+
+      const existingUsername = await Usuario.findOne({
+        username: finalUsername,
+      });
+      if (existingUsername) {
+        return res.status(400).json({
+          message: 'USERNAME_EXISTS',
+          detail: 'Este nombre de usuario ya está en uso',
+        });
+      }
+
       user = new Usuario({
-        username: name,
+        username: finalUsername,
         gmail,
         birthday: birthdayDate,
         rol: 'usuario',
         isGoogleUser: true,
         googleId,
+        interests: userInterests,
       } as Partial<IUsuario>);
 
       await user.save();
+      logger.info(
+        `✅ Nuevo usuario creado con Google: ${finalUsername}, intereses: ${userInterests.length}`,
+      );
     } else {
       if (!user.isGoogleUser) {
         return res.status(400).json({
@@ -481,6 +711,13 @@ export async function loginWithGoogle(req: Request, res: Response) {
         user.birthday = birthdayDate;
         mustSave = true;
       }
+      if (userInterests.length > 0) {
+        user.interests = userInterests;
+        mustSave = true;
+        logger.info(
+          `📝 Actualizando intereses para usuario existente: ${user.username}`,
+        );
+      }
       if (mustSave) {
         await user.save();
       }
@@ -490,8 +727,8 @@ export async function loginWithGoogle(req: Request, res: Response) {
       return res.status(403).json({ message: 'USER_DISABLED' });
     }
 
-    const token = await generateToken(user!, res);
-    const refreshToken = await generateRefreshToken(user!, res);
+    const token = generateToken(user!);
+    const refreshToken = generateRefreshToken(user!);
 
     return res.status(200).json({
       message: 'LOGIN EXITOSO',
@@ -505,8 +742,7 @@ export async function loginWithGoogle(req: Request, res: Response) {
   }
 }
 
-/* Create admin only development */
-export async function createAdminUser(
+/*export async function createAdminUser(
   req: Request,
   res: Response,
 ): Promise<Response> {
@@ -516,7 +752,7 @@ export async function createAdminUser(
   } catch (_error) {
     return res.status(500).json({ error: 'Error con usuario admin' });
   }
-}
+}*/
 
 export const checkEmailExists = async (req: Request, res: Response) => {
   try {
@@ -537,12 +773,10 @@ export const checkEmailExists = async (req: Request, res: Response) => {
     }
 
     if (userId && existingUser._id.toString() === userId) {
-      return res
-        .status(200)
-        .json({
-          exists: false,
-          message: 'El correo pertenece al mismo usuario',
-        });
+      return res.status(200).json({
+        exists: false,
+        message: 'El correo pertenece al mismo usuario',
+      });
     }
 
     return res
@@ -617,17 +851,16 @@ export async function refreshToken(
   res: Response,
 ): Promise<Response> {
   try {
-    const id = (req as any).user.payload.id;
+    const id = (req as Request & { user: { payload: { id: string } } }).user
+      .payload.id;
     const user = await userService.getUserById(id);
     if (!user) {
       logger.warn(`Usuario no encontrado en refreshToken con ID: ${id}`);
       return res.status(404).json({ message: 'USUARIO NO ENCONTRADO' });
     }
-    logger.info({ user: user._id }, 'Usuario para refresh token');
 
-    const newToken = await generateToken(user, res);
+    const newToken = generateToken(user);
     logger.info(`Nuevo token generado para el usuario con ID: ${id}`);
-    logger.info({ token: newToken }, 'Nuevo token generado');
     return res.status(200).json({
       token: newToken,
     });
@@ -671,12 +904,54 @@ export async function listFriends(req: Request, res: Response) {
 export async function sendFriendRequest(req: Request, res: Response) {
   try {
     const { id, targetId } = req.body;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(targetId)
+    ) {
+      return res.status(400).json({ ok: false, message: 'IDs inválidos' });
+    }
+
+    if (id === targetId) {
+      return res.status(400).json({
+        ok: false,
+        message: 'No puedes enviarte una solicitud a ti mismo',
+      });
+    }
+
     const result = await userService.sendFriendRequest(id, targetId);
-    logger.info(`Solicitud de amistad enviada: from: ${id}, to: ${targetId}`);
-    res.status(200).json(result);
-  } catch (error: any) {
-    logger.error('Error en sendFriendRequest:', error);
-    res.status(400).json({ error: error.message });
+
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+
+    try {
+      const { io } = await import('../index');
+      const fromUser = await Usuario.findById(id)
+        .select('username gmail')
+        .lean();
+
+      if (io && fromUser) {
+        io.to(`user:${targetId}`).emit('friendRequest:received', {
+          fromUserId: id,
+          fromUsername: fromUser.username,
+          fromGmail: fromUser.gmail,
+        });
+        logger.info(
+          `🔔 Evento friendRequest:received enviado a user:${targetId}`,
+        );
+      }
+    } catch (socketError) {
+      logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    logger.error(`Error en sendFriendRequest: ${String(error)}`);
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al enviar solicitud de amistad',
+    });
   }
 }
 
@@ -695,28 +970,93 @@ export const getSentRequests = async (req: Request, res: Response) => {
 export async function acceptFriendRequest(req: Request, res: Response) {
   try {
     const { id, requesterId } = req.body;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(requesterId)
+    ) {
+      return res.status(400).json({ ok: false, message: 'IDs inválidos' });
+    }
+
     const result = await userService.acceptFriendRequest(id, requesterId);
-    logger.info(
-      `Solicitud de amistad aceptada: by: ${id}, from: ${requesterId}`,
-    );
-    res.status(200).json(result);
-  } catch (error: any) {
-    logger.error('Error en acceptFriendRequest:', error);
-    res.status(400).json({ error: error.message });
+
+    if (!result) {
+      return res
+        .status(404)
+        .json({ ok: false, message: 'Usuario no encontrado' });
+    }
+
+    try {
+      const { io } = await import('../index');
+      if (io) {
+        io.to(`user:${id}`).emit('friendRequest:updated', {
+          type: 'accepted',
+          userId: requesterId,
+        });
+        logger.info(`🔔 Evento friendRequest:updated enviado a user:${id}`);
+      }
+    } catch (socketError) {
+      logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: 'Solicitud aceptada',
+      rewardDataUser: result.rewardDataUser,
+      rewardDataRequester: result.rewardDataRequester,
+    });
+  } catch (error) {
+    logger.error(`Error en acceptFriendRequest: ${String(error)}`);
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al aceptar solicitud de amistad',
+    });
   }
 }
 
 export async function rejectFriendRequest(req: Request, res: Response) {
   try {
     const { id, requesterId } = req.body;
-    const result = await userService.rejectFriendRequest(id, requesterId);
-    logger.info(
-      `Solicitud de amistad rechazada: by: ${id}, from: ${requesterId}`,
-    );
-    res.status(200).json(result);
-  } catch (error: any) {
-    logger.error('Error en rejectFriendRequest:', error);
-    res.status(400).json({ error: error.message });
+
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(requesterId)
+    ) {
+      return res.status(400).json({ ok: false, message: 'IDs inválidos' });
+    }
+
+    const updatedUser = await userService.rejectFriendRequest(id, requesterId);
+
+    if (!updatedUser) {
+      return res
+        .status(404)
+        .json({ ok: false, message: 'Usuario no encontrado' });
+    }
+
+    try {
+      const { io } = await import('../index');
+      if (io) {
+        io.to(`user:${id}`).emit('friendRequest:updated', {
+          type: 'rejected',
+          userId: requesterId,
+        });
+        logger.info(`🔔 Evento friendRequest:updated enviado a user:${id}`);
+      }
+    } catch (socketError) {
+      logger.error(`Error al emitir evento Socket.IO: ${socketError}`);
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: 'Solicitud rechazada',
+      user: updatedUser,
+    });
+  } catch (error) {
+    logger.error(`Error en rejectFriendRequest: ${String(error)}`);
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al rechazar solicitud de amistad',
+    });
   }
 }
 
@@ -777,12 +1117,10 @@ export const removeFriendBoth = async (req: Request, res: Response) => {
       logger.warn(
         `IDs inválidos en removeFriendBoth: id=${id}, friendId=${friendId}`,
       );
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          message: 'Alguno de los IDs no es un ObjectId válido',
-        });
+      return res.status(400).json({
+        ok: false,
+        message: 'Alguno de los IDs no es un ObjectId válido',
+      });
     }
 
     const me = await userService.unlinkFriendsBothWays(id, friendId);
@@ -796,7 +1134,6 @@ export const removeFriendBoth = async (req: Request, res: Response) => {
         .status(400)
         .json({ ok: false, message: 'ID no valido', detail: msg });
     }
-    logger.error({ error: e }, 'removeFriendBoth error');
     logger.error(`Error en removeFriendBoth: ${msg}`);
     return res
       .status(500)
@@ -816,8 +1153,7 @@ export const getChatBetween = async (req: Request, res: Response) => {
 
     const messages = await userService.getChatBetween(userId, friendId);
     res.json(messages);
-  } catch (err) {
-    logger.error({ error: err }, 'Error al obtener chat');
+  } catch (_err) {
     res.status(500).json({ message: 'Error al obtener chat' });
   }
 };
@@ -835,9 +1171,8 @@ export const postChatMessage = async (req: Request, res: Response) => {
       createdAt: new Date(),
     };
     res.status(201).json(msg);
-  } catch (err) {
-    logger.error({ error: err }, 'Error al guardar mensaje');
-    res.status(500).json({ message: 'Error al guardar mensaje' });
+  } catch (_err) {
+    res.status(500).json({ message: 'Error al procesar mensaje' });
   }
 };
 
@@ -851,8 +1186,7 @@ export const getEventChatForEvent = async (req: Request, res: Response) => {
 
     const messages = await userService.getEventChat(eventId);
     return res.json(messages);
-  } catch (err) {
-    logger.error({ error: err }, 'Error al obtener chat de evento');
+  } catch (_err) {
     return res.status(500).json({ message: 'Error al obtener chat de evento' });
   }
 };
@@ -871,10 +1205,180 @@ export const postEventChatMessage = async (req: Request, res: Response) => {
       createdAt: new Date(),
     };
     return res.status(201).json(msg);
-  } catch (err) {
-    logger.error({ error: err }, 'Error al guardar mensaje de evento');
+  } catch (_err) {
     return res
       .status(500)
       .json({ message: 'Error al procesar mensaje de evento' });
+  }
+};
+
+export async function blockUser(req: Request, res: Response) {
+  try {
+    const { id, blockId } = req.body;
+    if (!id || !blockId) {
+      return res.status(400).json({ message: 'Faltan parámetros' });
+    }
+    const result = await userService.blockUser(id, blockId);
+    res.status(200).json(result);
+  } catch (error: any) {
+    logger.error('Error en blockUser:', error);
+    res.status(400).json({ error: error.message });
+  }
+}
+
+export async function unblockUser(req: Request, res: Response) {
+  try {
+    const { id, unblockId } = req.body;
+    if (!id || !unblockId) {
+      return res.status(400).json({ message: 'Faltan parámetros' });
+    }
+    const result = await userService.unblockUser(id, unblockId);
+    res.status(200).json(result);
+  } catch (error: any) {
+    logger.error('Error en unblockUser:', error);
+    res.status(400).json({ error: error.message });
+  }
+}
+
+export async function getBlockedUsers(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'ID es obligatorio' });
+    }
+    const users = await userService.getBlockedUsers(id);
+    res.status(200).json(users);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+}
+
+export async function updateInterests(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = (req as any).user?.id;
+    const { interests } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!Array.isArray(interests)) {
+      return res
+        .status(400)
+        .json({ message: 'Interests debe ser un array de strings' });
+    }
+
+    const user = await Usuario.findByIdAndUpdate(
+      userId,
+      { interests },
+      { new: true },
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    logger.info(`Intereses actualizados para el usuario ${userId}`);
+    return res.status(200).json({ ok: true, user });
+  } catch (error) {
+    logger.error(`Error al actualizar intereses: ${error}`);
+    return res.status(500).json({ message: 'Error al actualizar intereses' });
+  }
+}
+
+export async function deleteEventChatMessage(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { messageId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const result = await userService.deleteEventChatMessage(messageId, userId);
+
+    if (!result.success) {
+      return res.status(result.status || 400).json({ message: result.message });
+    }
+
+    logger.info(
+      `Mensaje de chat eliminado: ${messageId} por usuario ${userId}`,
+    );
+    return res.status(200).json({
+      message: result.message,
+      messageId,
+      deletedImage: result.deletedImage,
+    });
+  } catch (error) {
+    logger.error(`Error al eliminar mensaje de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al eliminar el mensaje' });
+  }
+}
+
+export const uploadChatImage = async (req: Request, res: Response) => {
+  try {
+    const { friendId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ message: 'No se ha proporcionado ninguna imagen' });
+    }
+
+    const imageUrl = `/uploads/friend-chat/${req.file.filename}`;
+
+    logger.info(
+      `Imagen de chat subida: ${imageUrl} de ${userId} a ${friendId}`,
+    );
+    return res.status(200).json({
+      ok: true,
+      imageUrl,
+    });
+  } catch (error) {
+    logger.error(`Error al subir imagen de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al subir la imagen' });
+  }
+};
+
+export const deleteChatMessage = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  try {
+    const { messageId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
+
+    const result = await userService.deleteChatMessage(messageId, userId);
+
+    if (!result.success) {
+      return res.status(result.status || 400).json({ message: result.message });
+    }
+
+    logger.info(
+      `Mensaje de chat eliminado: ${messageId} por usuario ${userId}`,
+    );
+    return res.status(200).json({
+      message: result.message,
+      messageId,
+      deletedImage: result.deletedImage,
+    });
+  } catch (error) {
+    logger.error(`Error al eliminar mensaje de chat: ${error}`);
+    return res.status(500).json({ message: 'Error al eliminar el mensaje' });
   }
 };

@@ -11,30 +11,51 @@ import {
   directResetPassword,
   addEventToUser,
   updateOwnProfile,
-  loginUser,           
-  createAdminUser,
+  uploadProfilePhoto,
+  deleteProfilePhoto,
+  loginUser,
+  //createAdminUser,
   checkEmailExists,
   checkUsernameExists,
-  disableUser,    
-  refreshToken,   
+  disableUser,
+  refreshToken,
   updateUserRole,
   sendFriendRequest,
   getSentRequests,
   acceptFriendRequest,
   rejectFriendRequest,
-  getFriendRequests, 
+  getFriendRequests,
   listFriends,
   removeFriendBoth,
-  getChatBetween, 
+  getChatBetween,
   postChatMessage,
   getEventChatForEvent,
   postEventChatMessage,
   postHeartbeat,
-  loginWithGoogle 
+  loginWithGoogle,
+  blockUser,
+  unblockUser,
+  checkGoogleUser,
+  getBlockedUsers,
+  updateInterests,
+  deleteEventChatMessage,
+  uploadChatImage,
+  deleteChatMessage,
+  getVisibleUsers,
 } from '../controller/usuarioController';
-import { validateUserContent, validateMessageContent } from '../profanityMiddleware';
-import{ authenticateToken, authenticateadminToken, authenticateOwner, authenticateRefreshToken } from '../auth/middleware';
-import { registerValidation, updateProfileValidation } from '../userValidators';
+import {
+  validateUserContent,
+  validateMessageContent,
+} from '../profanityMiddleware';
+import {
+  authenticateToken,
+  authenticateadminToken,
+  authenticateOwner,
+  authenticateRefreshToken,
+} from '../auth/middleware';
+import { registerValidation } from '../userValidators';
+import { uploadProfilePhoto as uploadPhotoMiddleware } from '../config/uploadConfig';
+import { uploadFriendChatImage } from '../config/uploadConfig';
 
 const router = Router();
 
@@ -105,6 +126,50 @@ router.get('/', getAllUsers);
  *         description: Error en los datos del usuario
  */
 router.post('/', registerValidation, validateUserContent, createUser);
+
+/**
+ * @swagger
+ * /api/user/visible:
+ *   get:
+ *     summary: Obtener usuarios visibles (excluye al usuario actual y admins)
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Cantidad de usuarios por página
+ *     responses:
+ *       200:
+ *         description: Lista de usuarios visibles obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Usuario'
+ *                 totalItems:
+ *                   type: number
+ *                 page:
+ *                   type: number
+ *                 totalPages:
+ *                   type: number
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/visibleusers', authenticateToken, getVisibleUsers);
 
 /**
  * @swagger
@@ -215,7 +280,71 @@ router.put('/:id', authenticateadminToken, validateUserContent, updateUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.put('/:id/self', authenticateOwner, validateUserContent, updateOwnProfile);
+router.put(
+  '/:id/self',
+  authenticateOwner,
+  validateUserContent,
+  updateOwnProfile,
+);
+
+/**
+ * @swagger
+ * /api/user/{id}/profile-photo:
+ *   post:
+ *     summary: Subir foto de perfil
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photo:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Foto de perfil subida exitosamente
+ *       400:
+ *         description: Error en la solicitud
+ *       403:
+ *         description: No autorizado
+ */
+router.post(
+  '/:id/profile-photo',
+  authenticateOwner,
+  uploadPhotoMiddleware.single('photo'),
+  uploadProfilePhoto,
+);
+
+/**
+ * @swagger
+ * /api/user/{id}/profile-photo:
+ *   delete:
+ *     summary: Eliminar foto de perfil
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Foto de perfil eliminada exitosamente
+ *       403:
+ *         description: No autorizado
+ *       404:
+ *         description: Usuario no encontrado
+ */
+router.delete('/:id/profile-photo', authenticateOwner, deleteProfilePhoto);
 
 /**
  * @swagger
@@ -236,7 +365,7 @@ router.put('/:id/self', authenticateOwner, validateUserContent, updateOwnProfile
  *       404:
  *         description: Usuario no encontrado
  */
-router.delete('/:id',authenticateadminToken, deleteUserById);
+router.delete('/:id', authenticateadminToken, deleteUserById);
 
 /**
  * @swagger
@@ -271,7 +400,11 @@ router.delete('/:id',authenticateadminToken, deleteUserById);
  *       404:
  *         description: Usuario no encontrado
  */
-router.patch('/:id/delete-with-password', authenticateOwner, deleteWithPassword);
+router.patch(
+  '/:id/delete-with-password',
+  authenticateOwner,
+  deleteWithPassword,
+);
 
 /**
  * @swagger
@@ -397,7 +530,9 @@ router.post('/auth/login', loginUser);
 
 router.post('/auth/google', loginWithGoogle);
 
-/**
+router.post('/auth/google/check', checkGoogleUser);
+
+/*
  * @swagger
  * /api/user/auth/create-admin:
  *   post:
@@ -406,8 +541,8 @@ router.post('/auth/google', loginWithGoogle);
  *     responses:
  *       200:
  *         description: Usuario admin creado/verificado
- */
-router.post('/auth/create-admin', createAdminUser);
+ 
+router.post('/auth/create-admin', createAdminUser);*/
 
 /**
  * @swagger
@@ -748,6 +883,76 @@ router.get('/:id/requests/sent', authenticateOwner, getSentRequests);
 
 /**
  * @swagger
+ * /api/user/info/block:
+ *   post:
+ *     summary: Bloquear a un usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               blockId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Usuario bloqueado
+ */
+router.post('/info/block', authenticateToken, blockUser);
+
+/**
+ * @swagger
+ * /api/user/info/unblock:
+ *   post:
+ *     summary: Desbloquear a un usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               unblockId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Usuario desbloqueado
+ */
+router.post('/info/unblock', authenticateToken, unblockUser);
+
+/**
+ * @swagger
+ * /api/user/{id}/blocked:
+ *   get:
+ *     summary: Obtener lista de usuarios bloqueados
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lista de bloqueados
+ */
+router.get('/:id/blocked', authenticateOwner, getBlockedUsers);
+
+/**
+ * @swagger
  * /api/user/{id}/heartbeat:
  *   post:
  *     summary: Registrar el heartbeat (última conexión) de un usuario
@@ -767,6 +972,35 @@ router.get('/:id/requests/sent', authenticateOwner, getSentRequests);
  *         description: Error del servidor
  */
 router.post('/:id/heartbeat', authenticateOwner, postHeartbeat);
+
+/**
+ * @swagger
+ * /api/user/interests:
+ *   post:
+ *     summary: Actualizar los intereses del usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               interests:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Intereses actualizados
+ *       401:
+ *         description: No autenticado
+ *       500:
+ *         description: Error del servidor
+ */
+router.post('/interests/update', authenticateToken, updateInterests);
 
 /**
  * @swagger
@@ -886,6 +1120,112 @@ router.get('/events/:eventId/chat', getEventChatForEvent);
  *       500:
  *         description: Error del servidor
  */
-router.post('/events/:eventId/chat', validateMessageContent, postEventChatMessage);
+router.post(
+  '/events/:eventId/chat',
+  validateMessageContent,
+  postEventChatMessage,
+);
+
+/**
+ * @swagger
+ * /api/user/events/chat/{messageId}:
+ *   delete:
+ *     summary: Eliminar un mensaje del chat de evento
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del mensaje a eliminar
+ *     responses:
+ *       200:
+ *         description: Mensaje eliminado correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: No tienes permiso para eliminar este mensaje
+ *       404:
+ *         description: Mensaje no encontrado
+ */
+router.delete(
+  '/events/chat/:messageId',
+  authenticateToken,
+  deleteEventChatMessage,
+);
+
+/**
+ * @swagger
+ * /api/user/{userId}/chat/{friendId}/image:
+ *   post:
+ *     summary: Subir una imagen al chat con un amigo
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: friendId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Imagen subida correctamente
+ *       401:
+ *         description: No autenticado
+ *       400:
+ *         description: Error en la solicitud
+ */
+router.post(
+  '/:userId/chat/:friendId/image',
+  authenticateToken,
+  uploadFriendChatImage.single('image'),
+  uploadChatImage,
+);
+
+/**
+ * @swagger
+ * /api/user/chat/{messageId}:
+ *   delete:
+ *     summary: Eliminar un mensaje del chat con amigo
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del mensaje a eliminar
+ *     responses:
+ *       200:
+ *         description: Mensaje eliminado correctamente
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: No tienes permiso para eliminar este mensaje
+ *       404:
+ *         description: Mensaje no encontrado
+ */
+router.delete('/chat/:messageId', authenticateToken, deleteChatMessage);
 
 export default router;

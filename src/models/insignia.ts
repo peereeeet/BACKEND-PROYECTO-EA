@@ -16,20 +16,23 @@ export interface IInsignia extends Document {
   };
 }
 
-const insigniaSchema = new Schema<IInsignia>({
-  codigo: { type: String, required: true, unique: true },
-  nombre: { type: String, required: true },
-  descripcion: { type: String, required: true },
-  icono: { type: String, default: '🏆' },
-  puntos: { type: Number, default: 0 },
-  criterios: {
-    eventosCreadosRequeridos: { type: Number },
-    eventosUnidosRequeridos: { type: Number },
-    valoracionesRequeridas: { type: Number },
-    amigosRequeridos: { type: Number },
-    puntosRequeridos: { type: Number }
-  }
-}, { timestamps: false, versionKey: false });
+const insigniaSchema = new Schema<IInsignia>(
+  {
+    codigo: { type: String, required: true, unique: true },
+    nombre: { type: String, required: true },
+    descripcion: { type: String, required: true },
+    icono: { type: String, default: '🏆' },
+    puntos: { type: Number, default: 0 },
+    criterios: {
+      eventosCreadosRequeridos: { type: Number },
+      eventosUnidosRequeridos: { type: Number },
+      valoracionesRequeridas: { type: Number },
+      amigosRequeridos: { type: Number },
+      puntosRequeridos: { type: Number },
+    },
+  },
+  { timestamps: false, versionKey: false },
+);
 
 export const Insignia = model<IInsignia>('Insignia', insigniaSchema);
 export default Insignia;

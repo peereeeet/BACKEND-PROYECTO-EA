@@ -4,7 +4,7 @@ import {
   obtenerProgresoUsuario,
   obtenerRanking,
   obtenerInsignias,
-  inicializarInsignias
+  inicializarInsignias,
 } from '../controller/gamificacionController';
 import { authenticateToken } from '../auth/middleware';
 

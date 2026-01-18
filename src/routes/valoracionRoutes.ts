@@ -5,7 +5,7 @@ import {
   updateValoracion,
   listValoracionesEvento,
   getValoracionById,
-  deleteValoracion
+  deleteValoracion,
 } from '../controller/valoracionController';
 import { authenticateToken } from '../auth/middleware';
 import { validateRatingContent } from '../profanityMiddleware';
@@ -51,7 +51,12 @@ const router = Router();
  *       500:
  *         description: Error del servidor
  */
-router.post('/event/:eventoId', authenticateToken, validateRatingContent, createValoracion);
+router.post(
+  '/event/:eventoId',
+  authenticateToken,
+  validateRatingContent,
+  createValoracion,
+);
 
 /**
  * @swagger
