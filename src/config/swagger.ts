@@ -12,6 +12,11 @@ const options: swaggerJSDoc.Options = {
     servers: [
       {
         url: 'https://ea2-api.upc.edu',
+        description: 'Servidor de Producción',
+      },
+      {
+        url: 'http://localhost:3000',
+        description: 'Servidor Local',
       },
     ],
   },

@@ -174,27 +174,6 @@ router.get('/visibleusers', authenticateToken, getVisibleUsers);
 /**
  * @swagger
  * /api/user/{id}:
- *   get:
- *     summary: Obtener un usuario por ID
- *     tags: [Usuarios]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID del usuario
- *     responses:
- *       200:
- *         description: Usuario encontrado
- *       404:
- *         description: Usuario no encontrado
- */
-router.get('/:id', getUserById);
-
-/**
- * @swagger
- * /api/user/{id}:
  *   put:
  *     summary: Actualizar un usuario por ID
  *     tags: [Usuarios]
@@ -639,6 +618,27 @@ router.post('/check-email', checkEmailExists);
  *         description: Error del servidor
  */
 router.post('/check-username', checkUsernameExists);
+
+/**
+ * @swagger
+ * /api/user/{id}:
+ *   get:
+ *     summary: Obtener un usuario por ID
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Usuario encontrado
+ *       404:
+ *         description: Usuario no encontrado
+ */
+router.get('/:id', getUserById);
 
 router.post('/refresh', authenticateRefreshToken, refreshToken);
 

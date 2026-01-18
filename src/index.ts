@@ -28,9 +28,16 @@ const PORT = process.env.PORT || 3000;
 const usuarioServices = new UserService();
 const httpServer = createServer(app);
 
+const allowedOrigins = [
+  'http://localhost:4200',
+  'https://ea2.upc.edu',
+  'https://ea2-api.upc.edu',
+  'http://ea2-api.upc.edu',
+];
+
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: 'http://localhost:4200',
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   },
@@ -39,7 +46,13 @@ const io = new SocketIOServer(httpServer, {
 ////////////////////// MIDDLEWARE CORS + JSON //////////////////////
 app.use(
   cors({
-    origin: 'http://localhost:4200',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -138,8 +151,10 @@ async function cleanupOldNotificaciones() {
   }
 }
 
+const MONGO_URL = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/BBDD';
+
 mongoose
-  .connect('mongodb://127.0.0.1:27017/BBDD', {
+  .connect(MONGO_URL, {
     serverSelectionTimeoutMS: 5000,
     family: 4,
   } as mongoose.ConnectOptions)
@@ -168,11 +183,11 @@ mongoose
     cleanupOldEventPhotos();
 
     httpServer.listen(PORT, () => {
-      logger.info(`URL DEL SERVIDOR http://localhost:${PORT}`);
-      logger.info(`Swagger docs en http://localhost:${PORT}/api-docs`);
+      logger.info(`🚀 Servidor corriendo en puerto: ${PORT}`);
       logger.info(
-        `📂 Archivos estáticos: ${path.join(__dirname, 'public', 'uploads')}`,
+        `📁 Base de Datos: ${MONGO_URL.replace(/\/\/.*@/, '//***:***@')}`,
       );
+      logger.info(`📖 Swagger docs: /api-docs`);
     });
   })
   .catch((err) => {

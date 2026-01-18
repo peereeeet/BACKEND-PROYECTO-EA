@@ -4,7 +4,7 @@ import Usuario from '../models/usuario';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const MONGO_URI = 'mongodb://127.0.0.1:27017/BBDD';
+const MONGO_URI = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/BBDD';
 
 async function createAdmin() {
   try {
