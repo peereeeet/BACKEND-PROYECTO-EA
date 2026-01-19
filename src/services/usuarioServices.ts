@@ -16,8 +16,6 @@ import { io } from '../index';
 import gamificacionService from './gamificacionServices';
 import notificacionService from './notificacionServices';
 
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
-
 function oid(id: string): Types.ObjectId {
   if (!Types.ObjectId.isValid(id)) {
     throw new Error(`INVALID_OBJECT_ID:${id}`);
@@ -29,10 +27,9 @@ function transformProfilePhotoUrl(
   photoPath: string | null | undefined,
 ): string | null {
   if (!photoPath) return null;
-  if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
-    return photoPath;
-  }
-  return `${SERVER_URL}${photoPath}`;
+  // Retorna la ruta relativa tal como está almacenada
+  // El frontend/cliente construirá la URL completa con el dominio apropiado
+  return photoPath;
 }
 
 export class UserService {

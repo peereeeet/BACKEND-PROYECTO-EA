@@ -1306,7 +1306,7 @@ export async function uploadEventoPhoto(
     const isVideo = req.file.mimetype.startsWith('video/');
     const type = isVideo ? 'video' : 'image';
 
-    const photoUrl = `/api/event/${eventId}/photo/${req.file.filename}`;
+    const photoUrl = `/uploads/event-photos/${req.file.filename}`;
     const newMedia = new EventoPhoto({
       eventId: new Types.ObjectId(eventId),
       userId: new Types.ObjectId(userId),

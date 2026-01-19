@@ -1383,3 +1383,113 @@ export const deleteChatMessage = async (
     return res.status(500).json({ message: 'Error al eliminar el mensaje' });
   }
 };
+
+/**
+ * @swagger
+ * /api/user/detail/{id}:
+ *   get:
+ *     summary: Obtener detalles de un usuario por ID
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Detalles del usuario
+ *       400:
+ *         description: ID inválido
+ *       404:
+ *         description: Usuario no encontrado
+ */
+export const getUserDetail = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  return getUserById(req, res);
+};
+
+/**
+ * @swagger
+ * /api/user/{id}/online:
+ *   put:
+ *     summary: Actualizar el estado online del usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               online:
+ *                 type: boolean
+ *                 description: Estado online del usuario
+ *     responses:
+ *       200:
+ *         description: Estado actualizado correctamente
+ *       400:
+ *         description: ID inválido o datos incompletos
+ *       401:
+ *         description: No autenticado
+ *       404:
+ *         description: Usuario no encontrado
+ */
+export const updateUserOnline = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  try {
+    const { id } = req.params;
+    const { online } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      logger.warn(`ID inválido en updateUserOnline: ${id}`);
+      return res.status(400).json({ ok: false, message: 'ID inválido' });
+    }
+
+    if (typeof online !== 'boolean') {
+      logger.warn(`Estado online no válido en updateUserOnline: ${online}`);
+      return res
+        .status(400)
+        .json({ ok: false, message: 'El estado online debe ser booleano' });
+    }
+
+    let user;
+    if (online) {
+      user = await userService.setUserOnline(id);
+    } else {
+      user = await userService.setUserOffline(id);
+    }
+
+    if (!user) {
+      logger.warn(`Usuario no encontrado al actualizar online: ${id}`);
+      return res
+        .status(404)
+        .json({ ok: false, message: 'Usuario no encontrado' });
+    }
+
+    logger.info(`Estado online actualizado para usuario ${id}: ${online}`);
+    return res.status(200).json({
+      ok: true,
+      online: user.online,
+      lastSeen: user.lastSeen,
+    });
+  } catch (error) {
+    logger.error(`Error al actualizar estado online: ${error}`);
+    return res
+      .status(500)
+      .json({ ok: false, message: 'Error al actualizar estado online' });
+  }
+};

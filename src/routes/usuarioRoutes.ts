@@ -42,6 +42,8 @@ import {
   uploadChatImage,
   deleteChatMessage,
   getVisibleUsers,
+  getUserDetail,
+  updateUserOnline,
 } from '../controller/usuarioController';
 import {
   validateUserContent,
@@ -170,6 +172,29 @@ router.post('/', registerValidation, validateUserContent, createUser);
  *         description: No autenticado
  */
 router.get('/visibleusers', authenticateToken, getVisibleUsers);
+
+/**
+ * @swagger
+ * /api/user/detail/{id}:
+ *   get:
+ *     summary: Obtener detalles de un usuario por ID (alias)
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Detalles del usuario
+ *       400:
+ *         description: ID inválido
+ *       404:
+ *         description: Usuario no encontrado
+ */
+router.get('/detail/:id', getUserDetail);
 
 /**
  * @swagger
@@ -972,6 +997,54 @@ router.get('/:id/blocked', authenticateOwner, getBlockedUsers);
  *         description: Error del servidor
  */
 router.post('/:id/heartbeat', authenticateOwner, postHeartbeat);
+
+/**
+ * @swagger
+ * /api/user/{id}/online:
+ *   put:
+ *     summary: Actualizar el estado online del usuario
+ *     tags: [Usuarios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               online:
+ *                 type: boolean
+ *                 description: Estado online del usuario
+ *     responses:
+ *       200:
+ *         description: Estado actualizado correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                 online:
+ *                   type: boolean
+ *                 lastSeen:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: ID inválido o datos incompletos
+ *       401:
+ *         description: No autenticado
+ *       404:
+ *         description: Usuario no encontrado
+ */
+router.put('/:id/online', authenticateOwner, updateUserOnline);
 
 /**
  * @swagger
