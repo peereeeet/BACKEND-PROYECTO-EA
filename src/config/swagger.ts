@@ -1,4 +1,4 @@
-import swaggerJSDoc, { Options } from 'swagger-jsdoc';
+import swaggerJSDoc from 'swagger-jsdoc';
 
 const options: swaggerJSDoc.Options = {
   definition: {
@@ -6,21 +6,23 @@ const options: swaggerJSDoc.Options = {
     info: {
       title: 'API RESTful con Node, Express, TypeScript y MongoDB',
       version: '1.0.0',
-      description: 'RUTAS DE LA API PARA EL SWAGGER (Node + Express + TS + MongoDB)',
+      description:
+        'RUTAS DE LA API PARA EL SWAGGER (Node + Express + TS + MongoDB)',
     },
     servers: [
       {
-        url: 'http://localhost:3000/api-doc', 
+        url: 'https://ea2-api.upc.edu',
+        description: 'Servidor de Producción',
+      },
+      {
+        url: 'http://localhost:3000',
+        description: 'Servidor Local',
       },
     ],
   },
-  apis: [
-    './src/routes/usuarioRoutes.ts',
-    './src/routes/eventoRoutes.ts'
-  ],
+  apis: ['./dist/routes/*.js'],
 };
 
 const swaggerSpec = swaggerJSDoc(options);
-
 
 export default swaggerSpec;
