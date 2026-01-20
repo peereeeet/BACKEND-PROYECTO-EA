@@ -4,6 +4,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import usuarioRoutes from './routes/usuarioRoutes';
 import eventoRoutes from './routes/eventoRoutes';
 import { UserService } from './services/usuarioServices';
@@ -36,13 +37,14 @@ const allowedOrigins = [
 ];
 
 const io = new SocketIOServer(httpServer, {
+  path: '/socket.io',
+  transports: ['websocket'],
+  allowUpgrades: false,
   cors: {
     origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   },
-  transports: ['polling'],
-  allowUpgrades: false,
 });
 
 ////////////////////// MIDDLEWARE CORS + JSON //////////////////////
@@ -80,13 +82,102 @@ app.use(
   express.static(path.join(__dirname, 'public', 'uploads', 'friend-chat')),
 );
 
+// Middleware para loguear solicitudes a /uploads
 app.use('/uploads', (req, res, next) => {
   logger.info(`📂 Archivo solicitado: ${req.url}`);
   next();
 });
 
+// Servir toda la carpeta /uploads como estática (fallback)
+app.use(
+  '/uploads',
+  express.static(path.join(__dirname, 'public', 'uploads'), {
+    maxAge: '30d', // Cache de 30 días
+    etag: false,
+  }),
+);
+
 import authRoutes from './routes/authRoutes';
 
+////////////////////// ENDPOINT: Servir fotos de eventos //////////////////////
+/**
+ * GET /api/event/:eventId/photo/:filename?token=JWT
+ * Sirve archivos de fotos de eventos desde /app/dist/public/uploads/
+ * - Protegido contra path traversal
+ * - Cache headers: 30 días
+ * - Retorna 404 JSON si no existe
+ */
+app.get('/api/event/:eventId/photo/:filename', (req, res) => {
+  try {
+    const { eventId, filename } = req.params;
+    // El token en query string se ignora (no se valida aún)
+    // const token = req.query.token;
+
+    // Protección contra path traversal: ../ no permitido
+    if (filename.includes('..')) {
+      logger.warn(`🚨 Path traversal attempt detectado: ${filename}`);
+      return res.status(400).json({
+        ok: false,
+        message: 'Invalid filename',
+      });
+    }
+
+    // Construir ruta segura del archivo
+    // Archivos están en: /app/dist/public/uploads/event-photos/ (en producción)
+    // O en: dist/public/uploads/event-photos/ (en desarrollo)
+    const uploadsDir = path.join(
+      __dirname,
+      'public',
+      'uploads',
+      'event-photos',
+    );
+    const filePath = path.join(uploadsDir, filename);
+
+    // Verificar que la ruta resuelta está dentro de uploadsDir (seguridad)
+    const resolvedPath = path.resolve(filePath);
+    const resolvedUploadsDir = path.resolve(uploadsDir);
+    if (!resolvedPath.startsWith(resolvedUploadsDir)) {
+      logger.warn(`🚨 Path traversal bloqueado: ${filename}`);
+      return res.status(400).json({
+        ok: false,
+        message: 'Invalid filename',
+      });
+    }
+
+    // Verificar si el archivo existe
+    if (!fs.existsSync(filePath)) {
+      logger.warn(
+        `📸 Foto de evento no encontrada: eventId=${eventId}, filename=${filename}`,
+      );
+      return res.status(404).json({
+        ok: false,
+        message: 'Foto no encontrada',
+        eventId,
+        filename,
+      });
+    }
+
+    // Headers de cache: 30 días
+    const thirtyDaysInSeconds = 30 * 24 * 60 * 60;
+    res.set('Cache-Control', `public, max-age=${thirtyDaysInSeconds}`);
+    res.set(
+      'Expires',
+      new Date(Date.now() + thirtyDaysInSeconds * 1000).toUTCString(),
+    );
+
+    // Enviar archivo
+    logger.info(`✅ Sirviendo foto de evento: ${filename}`);
+    return res.sendFile(filePath);
+  } catch (error) {
+    logger.error(`❌ Error sirviendo foto de evento: ${error}`);
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al servir la foto',
+    });
+  }
+});
+
+////////////////////// RUTAS API //////////////////////
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/auth', authRoutes);
 app.use('/api/user', usuarioRoutes);
